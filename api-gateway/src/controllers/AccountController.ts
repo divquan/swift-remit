@@ -58,7 +58,7 @@ export class AccountController {
         user_data_64: '',
         user_data_32: 0,
         ledger: 1, // Default ledger for this currency
-        code: this.getCurrencyCode(currency),
+        code: AccountController.getCurrencyCode(currency),
         flags: 0
       };
       

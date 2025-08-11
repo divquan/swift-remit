@@ -8,7 +8,8 @@ import adminRoutes from './admin';
 const router = Router();
 
 // API version prefix
-const API_VERSION = '/api/v1';
+// const API_VERSION = '/api/v1';
+const API_VERSION = '';
 
 // Mount routes
 router.use(`${API_VERSION}/auth`, authRoutes);

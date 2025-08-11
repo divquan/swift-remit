@@ -116,3 +116,5 @@ Thumbs.db
 
 # Prisma
 prisma/migrations/dev.db*
+data/*.tigerbeetle
+data/*.tigerbeetle

@@ -34,6 +34,7 @@ services:
 
   tigerbeetle_single:
     image: ghcr.io/tigerbeetle/tigerbeetle
+    container_name: swiftremit_tigerbeetle_single
     command: "start --addresses=0.0.0.0:3333 /data/single.tigerbeetle"
     ports:
       - "3333:3333"
@@ -52,6 +53,8 @@ services:
     build:
       context: ./api-gateway
       dockerfile: Dockerfile
+      target: dev   # 👈 use dev stage for hot reload
+
     container_name: swiftremit_api_gateway
     restart: unless-stopped
     ports:
@@ -63,9 +66,20 @@ services:
       - redis
       - tigerbeetle_single
 
+    develop:
+      watch:
+        - path: ./api-gateway
+          action: sync
+          target: /app
+          ignore:
+            - node_modules/
+        - path: ./api-gateway/package.json
+          action: rebuild
+
 
 volumes:
   postgres_data:
   redis_data:
+
 
 
