@@ -101,7 +101,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(201).json(response);
+  return res.status(201).json(response);
     } catch (error) {
       console.error('Create account error:', error);
       
@@ -113,7 +113,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 
@@ -176,7 +176,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.json(response);
+  return res.json(response);
     } catch (error) {
       console.error('Get account error:', error);
       
@@ -188,7 +188,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 
@@ -260,7 +260,7 @@ export class AccountController {
           requestId: req.headers['x-request-id'] as string
         };
         
-        res.json(response);
+  return res.json(response);
       } catch (tbError) {
         console.error('TigerBeetle balance query failed:', tbError);
         throw new Error('Failed to retrieve balance');
@@ -276,7 +276,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 
@@ -387,7 +387,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.json(response);
+  return res.json(response);
     } catch (error) {
       console.error('List transactions error:', error);
       
@@ -399,7 +399,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 

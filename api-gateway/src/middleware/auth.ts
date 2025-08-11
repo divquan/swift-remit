@@ -23,9 +23,9 @@ export const authenticate = (req: AuthenticatedRequest, res: Response, next: Nex
     const token = authHeader.substring(7);
     
     const decoded = jwt.verify(token, config.jwt.secret) as AuthTokenPayload;
-    req.user = decoded;
+  req.user = decoded;
     
-    next();
+  return next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
       return res.status(401).json({

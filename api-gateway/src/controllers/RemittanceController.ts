@@ -133,10 +133,7 @@ export class RemittanceController {
           fee,
           status: 'PENDING',
           paymentProvider,
-          metadata: metadata || {},
-          user: {
-            connect: { id: userId }
-          }
+          metadata: metadata || {}
         }
       });
       
@@ -174,10 +171,9 @@ export class RemittanceController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(202).json(response);
+  return res.status(202).json(response);
     } catch (error) {
       console.error('Send remittance error:', error);
-      
       const response: ApiResponse = {
         success: false,
         message: 'Failed to initiate remittance',
@@ -185,8 +181,7 @@ export class RemittanceController {
         timestamp: new Date().toISOString(),
         requestId: req.headers['x-request-id'] as string
       };
-      
-      res.status(500).json(response);
+      return res.status(500).json(response);
     }
   }
 
@@ -248,7 +243,7 @@ export class RemittanceController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.json(response);
+  return res.json(response);
     } catch (error) {
       console.error('Get remittance status error:', error);
       
@@ -260,7 +255,7 @@ export class RemittanceController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 
@@ -345,7 +340,7 @@ export class RemittanceController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(202).json(response);
+  return res.status(202).json(response);
     } catch (error) {
       console.error('Refund error:', error);
       
@@ -357,7 +352,7 @@ export class RemittanceController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 
@@ -435,7 +430,7 @@ export class RemittanceController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(202).json(response);
+  return res.status(202).json(response);
     } catch (error) {
       console.error('Reverse error:', error);
       
@@ -447,7 +442,7 @@ export class RemittanceController {
         requestId: req.headers['x-request-id'] as string
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 

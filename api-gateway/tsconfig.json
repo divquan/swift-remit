@@ -43,5 +43,8 @@
     "node_modules",
     "dist",
     "**/*.test.ts"
-  ]
+  ],
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
+  }
 }

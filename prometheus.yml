@@ -1,0 +1,78 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'swiftremit-monitor'
+    environment: 'development'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'
+# rule_files:
+#   - "alert_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # PostgreSQL metrics (requires postgres_exporter)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    # Uncomment if you add postgres_exporter to your compose
+    # params:
+    #   collect[]: ['pg_stat_database', 'pg_stat_user_tables']
+
+  # Redis metrics (requires redis_exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+    # Uncomment if you add redis_exporter to your compose
+
+  # Your SwiftRemit application metrics
+  - job_name: 'swiftremit-api'
+    static_configs:
+      - targets: ['swiftremit-api:8080']  # Adjust port as needed
+    scrape_interval: 15s
+    metrics_path: /metrics
+    # Common metrics endpoints: /metrics, /actuator/prometheus
+
+  # TigerBeetle metrics (if it exposes them)
+  - job_name: 'tigerbeetle'
+    static_configs:
+      - targets: ['swiftremit_tigerbeetle:3000']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    # Note: Check TigerBeetle docs for actual metrics endpoint
+
+  # Node/System metrics (requires node_exporter)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+    # Uncomment if you add node_exporter to your compose
+
+  # Docker container metrics (requires cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    # Uncomment if you add cAdvisor to your compose
+
+# Storage configuration
+# NOTE: Retention settings are not supported in the YAML config for Prometheus v2.
+# Please configure retention via CLI flags, for example:
+# --storage.tsdb.retention.time=30d
+# --storage.tsdb.retention.size=10GB

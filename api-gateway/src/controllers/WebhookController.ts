@@ -91,7 +91,7 @@ export class WebhookController {
         requestId: req.headers['x-request-id'] as string || 'unknown'
       };
       
-      res.json(response);
+  return res.json(response);
     } catch (error) {
       console.error('Webhook processing error:', error);
       
@@ -103,7 +103,7 @@ export class WebhookController {
         requestId: req.headers['x-request-id'] as string || 'unknown'
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 
@@ -188,7 +188,7 @@ export class WebhookController {
         requestId: req.headers['x-request-id'] as string || 'unknown'
       };
       
-      res.json(response);
+  return res.json(response);
     } catch (error) {
       console.error('FX rate update error:', error);
       
@@ -200,7 +200,7 @@ export class WebhookController {
         requestId: req.headers['x-request-id'] as string || 'unknown'
       };
       
-      res.status(500).json(response);
+  return res.status(500).json(response);
     }
   }
 
