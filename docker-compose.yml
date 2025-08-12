@@ -60,6 +60,34 @@ services:
         - path: ./api-gateway/package.json
           action: rebuild
 
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+      target: dev  # Use dev stage for hot reload
+
+    container_name: swiftremit_orchestrator
+    security_opt:
+      - seccomp=unconfined
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    env_file:
+      - ./orchestrator/.env
+    depends_on:
+      - postgres
+      - redis
+
+    develop:
+      watch:
+        - path: ./orchestrator
+          action: sync
+          target: /app
+          ignore:
+            - node_modules/
+        - path: ./orchestrator/package.json
+          action: rebuild
+
 
 volumes:
   postgres_data:

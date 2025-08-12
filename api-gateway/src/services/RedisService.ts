@@ -9,6 +9,7 @@ export class RedisService {
   static async connect(): Promise<void> {
     if (this.isConnected) return;
 
+
     this.client = createClient({
       socket: {
         host: config.redis.host,
