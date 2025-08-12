@@ -34,7 +34,6 @@
     "redis": "^4.6.7",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
-    "tigerbeetle-node": "^0.16.54",
     "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",
     "uuid": "^9.0.0",

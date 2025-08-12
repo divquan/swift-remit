@@ -23,11 +23,6 @@ export const config = {
     password: process.env.REDIS_PASSWORD,
   },
   
-  tigerBeetle: {
-    host: process.env.TIGERBEETLE_HOST || 'localhost',
-    port: parseInt(process.env.TIGERBEETLE_PORT || '3001'),
-  },
-  
   services: {
     orchestrator: process.env.ORCHESTRATOR_URL || 'http://localhost:3002',
     paymentGateway: process.env.PAYMENT_GATEWAY_URL || 'http://localhost:3003',

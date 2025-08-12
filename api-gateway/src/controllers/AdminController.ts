@@ -3,7 +3,6 @@ import prisma from '../config/database';
 import { config } from '../config';
 import { ApiResponse, HealthCheckResponse, MetricsData } from '../types';
 import { RedisService } from '../services/RedisService';
-import { TigerBeetleService } from '../services/TigerBeetleService';
 
 export class AdminController {
   /**
@@ -44,26 +43,16 @@ export class AdminController {
         console.error('Redis health check failed:', redisError);
       }
       
-      // Check TigerBeetle connection
-      let tigerBeetleStatus: 'up' | 'down' = 'down';
-      try {
-        const isHealthy = await TigerBeetleService.healthCheck();
-        tigerBeetleStatus = isHealthy ? 'up' : 'down';
-      } catch (tbError) {
-        console.error('TigerBeetle health check failed:', tbError);
-      }
-      
       const [seconds, nanoseconds] = process.hrtime(startTime);
       const uptime = process.uptime();
       
-      const isHealthy = dbStatus === 'up' && redisStatus === 'up' && tigerBeetleStatus === 'up';
+      const isHealthy = dbStatus === 'up' && redisStatus === 'up';
       
       const healthData: HealthCheckResponse = {
         status: isHealthy ? 'healthy' : 'unhealthy',
         services: {
           database: dbStatus,
-          redis: redisStatus,
-          tigerBeetle: tigerBeetleStatus
+          redis: redisStatus
         },
         timestamp: new Date().toISOString(),
         uptime: Math.floor(uptime)
@@ -185,9 +174,9 @@ export class AdminController {
         where: { status: 'ACTIVE' },
         select: {
           id: true,
-          tigerBeetleId: true,
           currency: true,
-          userId: true
+          userId: true,
+          balance: true
         }
       });
       

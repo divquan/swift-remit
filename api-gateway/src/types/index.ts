@@ -78,37 +78,6 @@ export interface QueueJob {
   attempts?: number;
 }
 
-export interface TigerBeetleAccount {
-  id: string;
-  debits_pending: string;
-  debits_posted: string;
-  credits_pending: string;
-  credits_posted: string;
-  user_data_128: string;
-  user_data_64: string;
-  user_data_32: number;
-  ledger: number;
-  code: number;
-  flags: number;
-  timestamp: string;
-}
-
-export interface TigerBeetleTransfer {
-  id: string;
-  debit_account_id: string;
-  credit_account_id: string;
-  amount: string;
-  pending_id?: string;
-  user_data_128?: string;
-  user_data_64?: string;
-  user_data_32?: number;
-  timeout?: number;
-  ledger: number;
-  code: number;
-  flags: number;
-  timestamp?: string;
-}
-
 export interface ExchangeRateUpdate {
   fromCurrency: string;
   toCurrency: string;
@@ -121,7 +90,6 @@ export interface HealthCheckResponse {
   services: {
     database: 'up' | 'down';
     redis: 'up' | 'down';
-    tigerBeetle: 'up' | 'down';
   };
   timestamp: string;
   uptime: number;

@@ -56,18 +56,12 @@ const options = {
         Account: {
           type: 'object',
           properties: {
-            id: { type: 'string', format: 'uuid' },
-            userId: { type: 'string', format: 'uuid' },
-            tigerBeetleId: { type: 'string' },
-            accountType: { 
-              type: 'string', 
-              enum: ['PERSONAL', 'BUSINESS', 'MERCHANT'] 
-            },
-            currency: { type: 'string', length: 3 },
-            status: { 
-              type: 'string', 
-              enum: ['ACTIVE', 'SUSPENDED', 'CLOSED'] 
-            },
+            id: { type: 'string' },
+            userId: { type: 'string' },
+            accountType: { type: 'string' },
+            currency: { type: 'string' },
+            balance: { type: 'number' },
+            status: { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' }
           }
         },

@@ -44,30 +44,14 @@ export class AccountController {
       const { accountType, currency }: CreateAccountRequest = req.body;
       const userId = req.user!.userId;
       
-      // Generate TigerBeetle account ID
-      const tigerBeetleId = uuidv4().replace(/-/g, '').substring(0, 16);
-      
-      // Call TigerBeetle service to create account
-      try {
-        await TigerBeetleService.createAccount({
-          id: tigerBeetleId,
-          userId: userId,
-          ledger: 1, // Default ledger for this currency
-          code: AccountController.getCurrencyCode(currency)
-        });
-      } catch (tbError) {
-        console.error('TigerBeetle account creation failed:', tbError);
-        throw new Error('Failed to create financial account');
-      }
-      
-      // Create account in Postgres
+      // Create account in Postgres with initial balance of 0
       const account = await prisma.account.create({
         data: {
           id: uuidv4(),
           userId,
-          tigerBeetleId,
           accountType,
           currency,
+          balance: 0,
           status: 'ACTIVE'
         },
         include: {
@@ -184,7 +168,7 @@ export class AccountController {
    * @swagger
    * /accounts/{id}/balance:
    *   get:
-   *     summary: Get account balance from TigerBeetle
+   *     summary: Get account balance from PostgreSQL
    *     tags: [Accounts]
    *     security:
    *       - bearerAuth: []
@@ -223,35 +207,25 @@ export class AccountController {
         return res.status(404).json(response);
       }
       
-      // Get balance from TigerBeetle
-      try {
-        const tbAccount = await TigerBeetleService.getAccount(account.tigerBeetleId);
-        
-        if (!tbAccount) {
-          throw new Error('Account not found in TigerBeetle');
-        }
-        
-        const balance = {
-          ...TigerBeetleService.formatBalance(tbAccount),
-          currency: account.currency
-        };
-        
-        const response: ApiResponse = {
-          success: true,
-          message: 'Balance retrieved successfully',
-          data: {
-            accountId: account.id,
-            balance
-          },
-          timestamp: new Date().toISOString(),
-          requestId: req.headers['x-request-id'] as string
-        };
-        
-  return res.json(response);
-      } catch (tbError) {
-        console.error('TigerBeetle balance query failed:', tbError);
-        throw new Error('Failed to retrieve balance');
-      }
+      // Get balance from PostgreSQL
+      const balance = {
+        available: Number(account.balance),
+        pending: 0, // No pending balance in simple implementation
+        currency: account.currency
+      };
+      
+      const response: ApiResponse = {
+        success: true,
+        message: 'Balance retrieved successfully',
+        data: {
+          accountId: account.id,
+          balance
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string
+      };
+      
+      return res.json(response);
     } catch (error) {
       console.error('Get balance error:', error);
       
@@ -386,20 +360,7 @@ export class AccountController {
         requestId: req.headers['x-request-id'] as string
       };
       
-  return res.status(500).json(response);
+      return res.status(500).json(response);
     }
-  }
-
-  private static getCurrencyCode(currency: string): number {
-    // Map currencies to numeric codes for TigerBeetle
-    const currencyMap: Record<string, number> = {
-      'GHS': 936, // Ghana Cedi
-      'NGN': 566, // Nigerian Naira
-      'USD': 840, // US Dollar
-      'EUR': 978, // Euro
-      'GBP': 826, // British Pound
-    };
-    
-    return currencyMap[currency] || 999; // Default code for unknown currencies
   }
 }

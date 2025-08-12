@@ -1,202 +1,166 @@
-import { createClient } from 'tigerbeetle-node';
-import { config } from '../config';
+import { PrismaClient } from '@prisma/client';
+import { v4 as uuidv4 } from 'uuid';
 
-interface TigerBeetleAccount {
-  id: bigint;
-  debits_pending: bigint;
-  debits_posted: bigint;
-  credits_pending: bigint;
-  credits_posted: bigint;
-  user_data_128: bigint;
-  user_data_64?: bigint;
-  user_data_32?: number;
-  reserved?: number;
-  ledger: number;
-  code: number;
-  flags: number;
+const prisma = new PrismaClient();
+
+export interface CreateAccountData {
+  id: string;
+  currency: string;
+  type: string;
 }
 
-interface TigerBeetleTransfer {
-  id: bigint;
-  debit_account_id: bigint;
-  credit_account_id: bigint;
-  amount: bigint;
-  pending_id?: bigint;
-  user_data_128?: bigint;
-  user_data_64?: bigint;
-  user_data_32?: number;
-  timeout?: number;
-  reserved?: number;
-  ledger: number;
-  code: number;
-  flags: number;
+export interface CreateTransferData {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  currency: string;
+  description?: string;
+  reference?: string;
+  remittanceId?: string;
+}
+
+export interface AccountBalance {
+  balance: number;
+  currency: string;
 }
 
 export class TigerBeetleService {
-  private static client: any;
-  private static isConnected = false;
-
   static async connect(): Promise<void> {
     try {
-      if (!this.isConnected) {
-        // Connect to TigerBeetle cluster
-        // Use the Docker service name for inter-container communication
-        const clusterConfig = [{
-          host: "0.0.0.0",
-          port: config.tigerBeetle.port
-        }];
-
-        console.log("TB_Address:", clusterConfig)
-        
-        try {
-          this.client = createClient({
-            cluster_id: 0n,
-            replica_addresses: clusterConfig.map(c => `${c.host}:${c.port}`)
-          });
-          
-          this.isConnected = true;
-          console.log('✅ TigerBeetle client connected successfully');
-        } catch (clientError) {
-          console.error('❌ TigerBeetle createClient failed:', clientError);
-          throw new Error(`Failed to create TigerBeetle client: ${clientError}`);
-        }
-      }
+      await prisma.$connect();
+      console.log("✅ PostgreSQL transaction service connected successfully");
     } catch (error) {
-      console.error('❌ TigerBeetle connection failed:', error);
-      throw error;
+      console.error("❌ PostgreSQL connection failed:", error);
+      throw new Error(`Failed to connect to PostgreSQL: ${error}`);
     }
   }
 
   static async disconnect(): Promise<void> {
-    if (this.client && this.isConnected) {
-      this.client.destroy();
-      this.isConnected = false;
-      console.log('✅ TigerBeetle client disconnected');
-    }
+    await prisma.$disconnect();
+    console.log("✅ PostgreSQL transaction service disconnected");
   }
 
-  static async createAccount(accountData: {
-    id: string;
-    userId: string;
-    ledger: number;
-    code: number;
-  }): Promise<void> {
-    if (!this.isConnected) {
-      await this.connect();
-    }
+  static async createAccount(accountData: CreateAccountData): Promise<void> {
+    // Account creation is handled by the main account creation flow
+    // This method exists for compatibility with the old TigerBeetle interface
+    console.log(`✅ Account ready for transactions: ${accountData.id}`);
+  }
 
+  static async getAccount(accountId: string): Promise<any> {
     try {
-      // Convert string ID to bigint (TigerBeetle uses 128-bit IDs)
-      const accountId = BigInt('0x' + accountData.id.replace(/-/g, '').substring(0, 16));
-      const userIdBigInt = BigInt('0x' + accountData.userId.replace(/-/g, '').substring(0, 16));
+      const account = await prisma.account.findUnique({
+        where: { id: accountId },
+        select: {
+          id: true,
+          balance: true,
+          currency: true,
+          status: true,
+        },
+      });
 
-      const account: TigerBeetleAccount = {
-        id: accountId,
-        debits_pending: 0n,
-        debits_posted: 0n,
-        credits_pending: 0n,
-        credits_posted: 0n,
-        user_data_128: userIdBigInt,
-        user_data_64: 0n,
-        user_data_32: 0,
-        reserved: 0,
-        ledger: accountData.ledger,
-        code: accountData.code,
-        flags: 0
-      };
-
-      const result = await this.client.createAccounts([account]);
-      
-      if (result.length > 0) {
-        throw new Error(`TigerBeetle account creation failed: ${JSON.stringify(result)}`);
+      if (!account) {
+        return null;
       }
-      
-      console.log(`✅ TigerBeetle account created: ${accountData.id}`);
+
+      return {
+        id: account.id,
+        balance: account.balance,
+        currency: account.currency,
+        status: account.status,
+      };
     } catch (error) {
-      console.error('❌ TigerBeetle createAccount failed:', error);
+      console.error("❌ PostgreSQL getAccount failed:", error);
       throw error;
     }
   }
 
-  static async getAccount(accountId: string): Promise<TigerBeetleAccount | null> {
-    if (!this.isConnected) {
-      await this.connect();
-    }
+  static async createTransfer(transferData: CreateTransferData): Promise<void> {
+    const reference = transferData.reference || uuidv4();
 
     try {
-      const id = BigInt('0x' + accountId.replace(/-/g, '').substring(0, 16));
-      const accounts = await this.client.lookupAccounts([id]);
-      
-      return accounts.length > 0 ? accounts[0] : null;
+      await prisma.$transaction(async (tx) => {
+        // Check sender account balance
+        const senderAccount = await tx.account.findUnique({
+          where: { id: transferData.fromAccountId },
+        });
+
+        if (!senderAccount) {
+          throw new Error('Sender account not found');
+        }
+
+        if (senderAccount.balance.lt(transferData.amount)) {
+          throw new Error('Insufficient balance');
+        }
+
+        // Check receiver account exists
+        const receiverAccount = await tx.account.findUnique({
+          where: { id: transferData.toAccountId },
+        });
+
+        if (!receiverAccount) {
+          throw new Error('Receiver account not found');
+        }
+
+        // Update sender balance (debit)
+        await tx.account.update({
+          where: { id: transferData.fromAccountId },
+          data: {
+            balance: {
+              decrement: transferData.amount,
+            },
+          },
+        });
+
+        // Update receiver balance (credit)
+        await tx.account.update({
+          where: { id: transferData.toAccountId },
+          data: {
+            balance: {
+              increment: transferData.amount,
+            },
+          },
+        });
+
+        // Create transaction record
+        await tx.transaction.create({
+          data: {
+            debitAccountId: transferData.fromAccountId,
+            creditAccountId: transferData.toAccountId,
+            amount: transferData.amount,
+            currency: transferData.currency,
+            type: 'TRANSFER',
+            status: 'COMPLETED',
+            description: transferData.description,
+            reference,
+            remittanceId: transferData.remittanceId,
+          },
+        });
+
+        console.log(`✅ Transfer completed: ${reference}`);
+      });
     } catch (error) {
-      console.error('❌ TigerBeetle getAccount failed:', error);
-      throw error;
-    }
-  }
-
-  static async createTransfer(transferData: {
-    id: string;
-    debitAccountId: string;
-    creditAccountId: string;
-    amount: string;
-    ledger: number;
-    code: number;
-    flags?: number;
-  }): Promise<void> {
-    if (!this.isConnected) {
-      await this.connect();
-    }
-
-    try {
-      const transferId = BigInt('0x' + transferData.id.replace(/-/g, '').substring(0, 16));
-      const debitAccountId = BigInt('0x' + transferData.debitAccountId.replace(/-/g, '').substring(0, 16));
-      const creditAccountId = BigInt('0x' + transferData.creditAccountId.replace(/-/g, '').substring(0, 16));
-
-      const transfer: TigerBeetleTransfer = {
-        id: transferId,
-        debit_account_id: debitAccountId,
-        credit_account_id: creditAccountId,
-        amount: BigInt(transferData.amount),
-        ledger: transferData.ledger,
-        code: transferData.code,
-        flags: transferData.flags || 0
-      };
-
-      const result = await this.client.createTransfers([transfer]);
-      
-      if (result.length > 0) {
-        throw new Error(`TigerBeetle transfer creation failed: ${JSON.stringify(result)}`);
-      }
-      
-      console.log(`✅ TigerBeetle transfer created: ${transferData.id}`);
-    } catch (error) {
-      console.error('❌ TigerBeetle createTransfer failed:', error);
+      console.error("❌ PostgreSQL transfer failed:", error);
       throw error;
     }
   }
 
   static async healthCheck(): Promise<boolean> {
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-      
-      // Simple health check by trying to lookup a non-existent account
-      await this.client.lookupAccounts([1n]);
+      await prisma.$queryRaw`SELECT 1`;
       return true;
     } catch (error) {
-      console.error('❌ TigerBeetle health check failed:', error);
+      console.error("❌ PostgreSQL health check failed:", error);
       return false;
     }
   }
 
-  static formatBalance(account: TigerBeetleAccount): {
+  static formatBalance(account: any): {
     available: number;
     pending: number;
   } {
     return {
-      available: Number(account.credits_posted - account.debits_posted) / 100, // Assuming amounts are in cents
-      pending: Number(account.credits_pending - account.debits_pending) / 100
+      available: Number(account.balance || 0),
+      pending: 0, // No pending balance in simple PostgreSQL implementation
     };
   }
 }
