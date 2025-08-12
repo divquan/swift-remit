@@ -34,16 +34,20 @@ services:
 
   tigerbeetle_single:
     image: ghcr.io/tigerbeetle/tigerbeetle
+    security_opt:
+      - seccomp=unconfined
     container_name: swiftremit_tigerbeetle_single
     command: "start --addresses=0.0.0.0:3333 /data/single.tigerbeetle"
+    environment:
+      - TB_IO=epoll
     ports:
       - "3333:3333"
     volumes:
       - ${PWD}/data:/data
-    security_opt:
-      - "seccomp=unconfined"
     cap_add:
       - IPC_LOCK
+      - SYS_ADMIN
+    privileged: true
     ulimits:
       memlock:
         soft: -1
@@ -56,6 +60,8 @@ services:
       target: dev   # 👈 use dev stage for hot reload
 
     container_name: swiftremit_api_gateway
+    security_opt:
+      - seccomp=unconfined
     restart: unless-stopped
     ports:
       - "3000:3000"

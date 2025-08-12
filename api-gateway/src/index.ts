@@ -7,6 +7,7 @@ import swaggerUi from 'swagger-ui-express';
 import { config } from './config';
 import { swaggerSpec } from './config/swagger';
 import { RedisService } from './services/RedisService';
+import { TigerBeetleService } from './services/TigerBeetleService';
 import routes from './routes';
 import { 
   requestId, 
@@ -100,6 +101,10 @@ class App {
       await RedisService.connect();
       console.log('✅ Redis connected successfully');
 
+      // Initialize TigerBeetle connection
+      await TigerBeetleService.connect();
+      console.log('✅ TigerBeetle connected successfully');
+
       // Start server
       const server = this.app.listen(config.server.port, () => {
         console.log(`🚀 SwiftRemit API Gateway running on port ${config.server.port}`);
@@ -122,6 +127,13 @@ class App {
           } catch (error) {
             console.error('❌ Error disconnecting Redis:', error);
           }
+
+          try {
+            await TigerBeetleService.disconnect();
+            console.log('✅ TigerBeetle disconnected');
+          } catch (error) {
+            console.error('❌ Error disconnecting TigerBeetle:', error);
+          }
           
           process.exit(0);
         });
@@ -138,6 +150,13 @@ class App {
             console.log('✅ Redis disconnected');
           } catch (error) {
             console.error('❌ Error disconnecting Redis:', error);
+          }
+
+          try {
+            await TigerBeetleService.disconnect();
+            console.log('✅ TigerBeetle disconnected');
+          } catch (error) {
+            console.error('❌ Error disconnecting TigerBeetle:', error);
           }
           
           process.exit(0);

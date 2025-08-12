@@ -3,7 +3,7 @@ import prisma from '../config/database';
 import { config } from '../config';
 import { ApiResponse, HealthCheckResponse, MetricsData } from '../types';
 import { RedisService } from '../services/RedisService';
-import axios from 'axios';
+import { TigerBeetleService } from '../services/TigerBeetleService';
 
 export class AdminController {
   /**
@@ -47,10 +47,8 @@ export class AdminController {
       // Check TigerBeetle connection
       let tigerBeetleStatus: 'up' | 'down' = 'down';
       try {
-        await axios.get(`${config.tigerBeetle.host}:${config.tigerBeetle.port}/health`, {
-          timeout: 5000
-        });
-        tigerBeetleStatus = 'up';
+        const isHealthy = await TigerBeetleService.healthCheck();
+        tigerBeetleStatus = isHealthy ? 'up' : 'down';
       } catch (tbError) {
         console.error('TigerBeetle health check failed:', tbError);
       }

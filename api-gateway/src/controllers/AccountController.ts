@@ -2,9 +2,9 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database';
 import { config } from '../config';
-import { ApiResponse, CreateAccountRequest, TigerBeetleAccount } from '../types';
+import { ApiResponse, CreateAccountRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
-import axios from 'axios';
+import { TigerBeetleService } from '../services/TigerBeetleService';
 
 export class AccountController {
   /**
@@ -47,25 +47,13 @@ export class AccountController {
       // Generate TigerBeetle account ID
       const tigerBeetleId = uuidv4().replace(/-/g, '').substring(0, 16);
       
-      // Create account in TigerBeetle first
-      const tigerBeetleAccount = {
-        id: tigerBeetleId,
-        debits_pending: '0',
-        debits_posted: '0',
-        credits_pending: '0',
-        credits_posted: '0',
-        user_data_128: userId,
-        user_data_64: '',
-        user_data_32: 0,
-        ledger: 1, // Default ledger for this currency
-        code: AccountController.getCurrencyCode(currency),
-        flags: 0
-      };
-      
       // Call TigerBeetle service to create account
       try {
-        await axios.post(`${config.tigerBeetle.host}:${config.tigerBeetle.port}/accounts`, {
-          accounts: [tigerBeetleAccount]
+        await TigerBeetleService.createAccount({
+          id: tigerBeetleId,
+          userId: userId,
+          ledger: 1, // Default ledger for this currency
+          code: AccountController.getCurrencyCode(currency)
         });
       } catch (tbError) {
         console.error('TigerBeetle account creation failed:', tbError);
@@ -237,15 +225,14 @@ export class AccountController {
       
       // Get balance from TigerBeetle
       try {
-        const tbResponse = await axios.get(
-          `${config.tigerBeetle.host}:${config.tigerBeetle.port}/accounts/${account.tigerBeetleId}`
-        );
+        const tbAccount = await TigerBeetleService.getAccount(account.tigerBeetleId);
         
-        const tbAccount: TigerBeetleAccount = tbResponse.data;
+        if (!tbAccount) {
+          throw new Error('Account not found in TigerBeetle');
+        }
         
         const balance = {
-          available: parseFloat(tbAccount.credits_posted) - parseFloat(tbAccount.debits_posted),
-          pending: parseFloat(tbAccount.credits_pending) - parseFloat(tbAccount.debits_pending),
+          ...TigerBeetleService.formatBalance(tbAccount),
           currency: account.currency
         };
         
