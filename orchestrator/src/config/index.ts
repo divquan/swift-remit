@@ -29,8 +29,8 @@ export const CONFIG = {
   AUDIT_LOGGER_URL: process.env.AUDIT_LOGGER_URL || 'http://localhost:3004',
   
   // Paystack Configuration
-  PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY || 'sk_test_your_secret_key_here',
-  PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_your_public_key_here',
+  PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY || 'sk_test_45a6b86cd8f76273dbb4f46421f274acee89171f',
+  PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_81aec086991df0463d9f46f6df3bcbf2daa5ab3b',
   
   // Logging
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',

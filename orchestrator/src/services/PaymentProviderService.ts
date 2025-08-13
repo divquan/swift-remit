@@ -205,7 +205,7 @@ export class PaymentProviderService {
       const response = await axios.post(
         `${this.paystackBaseURL}/transaction/initialize`,
         {
-          email: request.senderDetails.email,
+          email: request?.senderDetails?.email,
           amount: amountInKobo,
           currency: currency,
           reference: `${request.remittanceId}_${Date.now()}`,
