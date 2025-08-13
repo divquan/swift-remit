@@ -45,10 +45,10 @@ model audit_logs {
   details      Json
   ipAddress    String?
   userAgent    String?
-  service      String?
-  level        String       @default("INFO")
-  timestamp    DateTime     @default(now())
   createdAt    DateTime     @default(now())
+  level        String       @default("INFO")
+  service      String?
+  timestamp    DateTime     @default(now())
   remittances  remittances? @relation(fields: [remittanceId], references: [id])
   users        users?       @relation(fields: [userId], references: [id])
 

@@ -184,6 +184,20 @@ export class OrchestratorService {
       };
 
     } catch (error) {
+      // Update remittance status to FAILED in database
+      try {
+        await db.remittances.update({
+          where: { id: remittanceId },
+          data: {
+            status: RemittanceStatus.FAILED,
+            failureReason: error instanceof Error ? error.message : 'Unknown error',
+            updatedAt: new Date()
+          }
+        });
+      } catch (dbError) {
+        console.error('Failed to update remittance status to FAILED:', dbError);
+      }
+
       // Log failure
       await this.auditLogger.log({
         userId,
