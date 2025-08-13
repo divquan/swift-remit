@@ -4,6 +4,7 @@ import accountRoutes from './accounts';
 import remittanceRoutes from './remittance';
 import webhookRoutes from './webhooks';
 import adminRoutes from './admin';
+import paymentRoutes from './payment';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use(`${API_VERSION}/auth`, authRoutes);
 router.use(`${API_VERSION}/accounts`, accountRoutes);
 router.use(`${API_VERSION}/remittance`, remittanceRoutes);
 router.use(`${API_VERSION}/webhook`, webhookRoutes);
+router.use(`${API_VERSION}/payment`, paymentRoutes);
 
 // Admin routes
 router.use(`${API_VERSION}/admin`, adminRoutes);
