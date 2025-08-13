@@ -6,7 +6,7 @@ import morgan from 'morgan';
 import swaggerUi from 'swagger-ui-express';
 import { config } from './config';
 import { swaggerSpec } from './config/swagger';
-import { RedisService } from './services/RedisService';
+import { KafkaService } from './services/KafkaService';
 import routes from './routes';
 import { 
   requestId, 
@@ -27,6 +27,8 @@ class App {
   }
 
   private initializeMiddleware(): void {
+
+    console.log("😜 DATABASE_URL: ", process.env.DATABASE_URL)
     // Security middleware
     this.app.use(helmet({
       contentSecurityPolicy: {
@@ -96,9 +98,9 @@ class App {
 
   public async start(): Promise<void> {
     try {
-      // Initialize Redis connection
-      await RedisService.connect();
-      console.log('✅ Redis connected successfully');
+      // Initialize Kafka connection
+      await KafkaService.connect();
+      console.log('✅ Kafka connected successfully');
 
       // Start server
       const server = this.app.listen(config.server.port, () => {
@@ -117,10 +119,10 @@ class App {
           console.log('✅ HTTP server closed');
             
           try {
-            await RedisService.disconnect();
-            console.log('✅ Redis disconnected');
+            await KafkaService.disconnect();
+            console.log('✅ Kafka disconnected');
           } catch (error) {
-            console.error('❌ Error disconnecting Redis:', error);
+            console.error('❌ Error disconnecting Kafka:', error);
           }
             
           process.exit(0);
@@ -134,10 +136,10 @@ class App {
           console.log('✅ HTTP server closed');
             
           try {
-            await RedisService.disconnect();
-            console.log('✅ Redis disconnected');
+            await KafkaService.disconnect();
+            console.log('✅ Kafka disconnected');
           } catch (error) {
-            console.error('❌ Error disconnecting Redis:', error);
+            console.error('❌ Error disconnecting Kafka:', error);
           }
             
           process.exit(0);

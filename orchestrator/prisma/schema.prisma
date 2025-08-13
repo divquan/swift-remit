@@ -45,9 +45,20 @@ model audit_logs {
   details      Json
   ipAddress    String?
   userAgent    String?
+  service      String?
+  level        String       @default("INFO")
+  timestamp    DateTime     @default(now())
   createdAt    DateTime     @default(now())
   remittances  remittances? @relation(fields: [remittanceId], references: [id])
   users        users?       @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([remittanceId])
+  @@index([action])
+  @@index([resource])
+  @@index([service])
+  @@index([level])
+  @@index([timestamp])
 }
 
 model exchange_rates {
@@ -84,7 +95,6 @@ model remittances {
   completedAt                                      DateTime?
   audit_logs                                       audit_logs[]
   accounts_remittances_senderAccountIdToaccounts   accounts         @relation("remittances_senderAccountIdToaccounts", fields: [senderAccountId], references: [id], map: "fk_remittance_senderAccountId")
-  users                                            users            @relation(fields: [senderAccountId], references: [id], map: "fk_remittance_user_senderAccountId")
   accounts_remittances_receiverAccountIdToaccounts accounts?        @relation("remittances_receiverAccountIdToaccounts", fields: [receiverAccountId], references: [id])
   transactions                                     transactions[]
 }
@@ -109,23 +119,22 @@ model transactions {
 }
 
 model users {
-  id            String        @id
-  email         String        @unique
+  id            String       @id
+  email         String       @unique
   password      String
   firstName     String
   lastName      String
   phoneNumber   String?
-  countryCode   String        @default("GH")
-  kycStatus     KycStatus     @default(PENDING)
-  isActive      Boolean       @default(true)
-  emailVerified Boolean       @default(false)
-  phoneVerified Boolean       @default(false)
-  createdAt     DateTime      @default(now())
+  countryCode   String       @default("GH")
+  kycStatus     KycStatus    @default(PENDING)
+  isActive      Boolean      @default(true)
+  emailVerified Boolean      @default(false)
+  phoneVerified Boolean      @default(false)
+  createdAt     DateTime     @default(now())
   updatedAt     DateTime
   lastLoginAt   DateTime?
   accounts      accounts[]
   audit_logs    audit_logs[]
-  remittances   remittances[]
 }
 
 enum AccountStatus {

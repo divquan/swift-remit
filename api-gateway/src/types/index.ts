@@ -71,7 +71,7 @@ export interface WebhookPayload {
 
 export interface QueueJob {
   id: string;
-  type: 'REMITTANCE' | 'REFUND' | 'REVERSE' | 'WEBHOOK_PROCESSING';
+  type: 'REMITTANCE' | 'REFUND' | 'REVERSE' | 'WEBHOOK_PROCESSING' | 'FX_RATE_UPDATE';
   data: Record<string, any>;
   priority?: number;
   delay?: number;
@@ -89,7 +89,7 @@ export interface HealthCheckResponse {
   status: 'healthy' | 'unhealthy';
   services: {
     database: 'up' | 'down';
-    redis: 'up' | 'down';
+    kafka: 'up' | 'down';
   };
   timestamp: string;
   uptime: number;

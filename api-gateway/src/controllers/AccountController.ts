@@ -4,7 +4,7 @@ import prisma from '../config/database';
 import { config } from '../config';
 import { ApiResponse, CreateAccountRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { TigerBeetleService } from '../services/TigerBeetleService';
+
 
 export class AccountController {
   /**
@@ -111,12 +111,16 @@ export class AccountController {
    */
   static async getAccount(req: AuthenticatedRequest, res: Response) {
     try {
+
+      console.log("Getting account information...")
+
+      console.log(req.params, req.user?.userId)
       const { id } = req.params;
       const userId = req.user!.userId;
       
       const account = await prisma.account.findFirst({
         where: {
-          id,
+          // id,
           userId // Ensure user can only access their own accounts
         },
         include: {

@@ -1,78 +1,65 @@
-import Bull from 'bull';
+import { Consumer } from 'kafkajs';
 import { OrchestratorService } from '@/services/OrchestratorService';
-import { QueueService } from '@/queues/QueueService';
+import { KafkaService } from '@/services/KafkaService';
 import { RemittanceJobData } from '@/types';
 import { CONFIG } from '@/config';
 
 export class RemittanceWorker {
   private orchestrator: OrchestratorService;
-  private queueService: QueueService;
+  private consumer: Consumer | null = null;
 
-  constructor(queueService: QueueService) {
+  constructor() {
     this.orchestrator = new OrchestratorService();
-    this.queueService = queueService;
   }
 
   /**
-   * Start processing remittance jobs
+   * Start processing remittance jobs from Kafka
    */
-  start(): void {
-    const queue = this.queueService.getRemittanceQueue();
-
-    // Process remittance jobs with concurrency
-    queue.process('process-remittance', CONFIG.QUEUE_CONCURRENCY, async (job: Bull.Job<RemittanceJobData>) => {
-      console.log(`Processing remittance job: ${job.id}`);
-      
-      try {
-        const result = await this.orchestrator.startRemittance(job.data);
-        
-        if (!result.success) {
-          throw new Error(result.errorMessage || 'Remittance processing failed');
-        }
-
-        console.log(`Remittance job completed: ${job.id}`);
-        return result;
-      } catch (error) {
-        console.error(`Remittance job failed: ${job.id}`, error);
-        throw error;
-      }
-    });
-
-    // Event handlers
-    queue.on('completed', (job: Bull.Job<RemittanceJobData>, result: any) => {
-      console.log(`Remittance job ${job.id} completed with result:`, result);
-    });
-
-    queue.on('failed', (job: Bull.Job<RemittanceJobData>, err: Error) => {
-      console.error(`Remittance job ${job.id} failed:`, err.message);
-      
-      // After max retries, mark as permanently failed
-      if (job.attemptsMade >= job.opts.attempts!) {
-        this.handlePermanentFailure(job);
-      }
-    });
-
-    queue.on('stalled', (job: Bull.Job<RemittanceJobData>) => {
-      console.warn(`Remittance job ${job.id} stalled`);
-    });
-
-    console.log('Remittance worker started');
-  }
-
-  /**
-   * Handle permanently failed jobs
-   */
-  private async handlePermanentFailure(job: Bull.Job<RemittanceJobData>): Promise<void> {
+  async start(): Promise<void> {
     try {
-      console.error(`Permanent failure for remittance job: ${job.id}`);
+      // Create consumer when starting, not in constructor
+      this.consumer = KafkaService.createConsumer('remittance-worker-group');
       
-      // Try to reverse the remittance if it was partially processed
-      await this.orchestrator.reverseRemittance(
-        job.data.remittanceId,
-        'Maximum retries exceeded'
-      );
+      await this.consumer.connect();
+      await this.consumer.subscribe({ topic: 'remittance-topic', fromBeginning: false });
+
+      await this.consumer.run({
+        eachMessage: async ({ topic, partition, message }) => {
+          try {
+            const jobData = JSON.parse(message.value!.toString());
+            console.log(`Processing remittance job from topic ${topic}:`, jobData);
+
+            const result = await this.orchestrator.startRemittance(jobData.data);
+            
+            if (!result.success) {
+              throw new Error(result.errorMessage || 'Remittance processing failed');
+            }
+
+            console.log(`Remittance job completed successfully:`, result);
+          } catch (error) {
+            console.error(`Remittance job failed:`, error);
+            // In a production system, you might want to send failed jobs to a dead letter queue
+          }
+        },
+      });
+
+      console.log('RemittanceWorker started and listening for messages');
     } catch (error) {
-      console.error(`Failed to reverse permanently failed remittance ${job.data.remittanceId}:`, error);
+      console.error('Failed to start RemittanceWorker:', error);
+    }
+  }
+
+  /**
+   * Stop the worker
+   */
+  async stop(): Promise<void> {
+    try {
+      if (this.consumer) {
+        await this.consumer.disconnect();
+        console.log('RemittanceWorker stopped');
+      }
+    } catch (error) {
+      console.error('Error stopping RemittanceWorker:', error);
     }
   }
 }

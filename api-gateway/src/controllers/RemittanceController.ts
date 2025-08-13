@@ -4,7 +4,7 @@ import prisma from '../config/database';
 import { config } from '../config';
 import { ApiResponse, SendRemittanceRequest, RefundRequest, ReverseRequest, QueueJob } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { RedisService } from '@/services/RedisService';
+import { KafkaService } from '@/services/KafkaService';
 
 
 export class RemittanceController {
@@ -16,6 +16,13 @@ export class RemittanceController {
    *     tags: [Remittance]
    *     security:
    *       - bearerAuth: []
+   *     parameters:
+   *       - in: header
+   *         name: idempotency-key
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Unique key to ensure idempotency of the request
    *     requestBody:
    *       required: true
    *       content:
@@ -107,6 +114,8 @@ export class RemittanceController {
         }
       });
       
+      console.log('Sender Account:', senderAccount);
+      
       if (!senderAccount) {
         const response: ApiResponse = {
           success: false,
@@ -118,7 +127,8 @@ export class RemittanceController {
       }
       
       // Calculate fee (simplified - would normally be more complex)
-      const fee = this.calculateFee(amount, currency, convertedCurrency);
+      const fee = RemittanceController.calculateFee(amount, currency, convertedCurrency);
+      
       
       // Create remittance record
       const remittance = await prisma.remittance.create({
@@ -143,18 +153,24 @@ export class RemittanceController {
         type: 'REMITTANCE',
         data: {
           remittanceId: remittance.id,
+          userId: senderAccount.userId,
           senderAccountId: senderAccount.id,
+          receiverAccountId: undefined, // For external transfers
+          receiverDetails,
           amount,
           currency,
-          convertedCurrency,
-          receiverDetails,
-          paymentProvider,
-          metadata
+          fee,
+          idempotencyKey,
+          metadata: {
+            convertedCurrency,
+            paymentProvider,
+            ...metadata
+          }
         }
       };
       
-      // Queue job to Redis
-      await RedisService.enqueueJob('remittance-queue', job);
+      // Queue job to Kafka
+      await KafkaService.publishJob('remittance-topic', job);
       
       const response: ApiResponse = {
         success: true,
@@ -213,7 +229,7 @@ export class RemittanceController {
       const remittance = await prisma.remittance.findFirst({
         where: {
           id,
-          user: { id: userId }
+          senderAccount: { userId }
         },
         include: {
           senderAccount: {
@@ -296,7 +312,7 @@ export class RemittanceController {
       const remittance = await prisma.remittance.findFirst({
         where: {
           id: remittanceId,
-          user: { id: userId },
+          senderAccount: { id: userId },
           status: 'COMPLETED'
         }
       });
@@ -325,7 +341,7 @@ export class RemittanceController {
         }
       };
       
-      await RedisService.enqueueJob('refund-queue', job);
+      await KafkaService.publishJob('refund-topic', job);
       
       const response: ApiResponse = {
         success: true,
@@ -391,7 +407,7 @@ export class RemittanceController {
       const remittance = await prisma.remittance.findFirst({
         where: {
           id: remittanceId,
-          user: { id: userId },
+          senderAccount: { id: userId },
           status: { in: ['PENDING', 'PROCESSING'] }
         }
       });
@@ -416,7 +432,7 @@ export class RemittanceController {
         }
       };
       
-      await RedisService.enqueueJob('reverse-queue', job);
+      await KafkaService.publishJob('reverse-topic', job);
       
       const response: ApiResponse = {
         success: true,

@@ -17,6 +17,12 @@ export const config = {
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
   },
   
+  kafka: {
+    brokers: process.env.KAFKA_BROKERS || 'kafka:9092',
+    clientId: process.env.KAFKA_CLIENT_ID || 'api-gateway',
+    groupId: process.env.KAFKA_GROUP_ID || 'api-gateway-group',
+  },
+  
   redis: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379'),

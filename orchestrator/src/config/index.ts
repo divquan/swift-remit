@@ -11,6 +11,11 @@ export const CONFIG = {
   // Database
   DATABASE_URL: process.env.DATABASE_URL || 'postgresql://username:password@localhost:5432/swiftremit',
   
+  // Kafka
+  KAFKA_BROKERS: process.env.KAFKA_BROKERS || 'kafka:9092',
+  KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID || 'orchestrator',
+  KAFKA_GROUP_ID: process.env.KAFKA_GROUP_ID || 'orchestrator-group',
+  
   // Redis
   redis: {
     host: process.env.REDIS_HOST || 'localhost',

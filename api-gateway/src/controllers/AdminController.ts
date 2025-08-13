@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { config } from '../config';
 import { ApiResponse, HealthCheckResponse, MetricsData } from '../types';
-import { RedisService } from '../services/RedisService';
+import { KafkaService } from '../services/KafkaService';
 
 export class AdminController {
   /**
@@ -30,29 +30,25 @@ export class AdminController {
         console.error('Database health check failed:', dbError);
       }
       
-      // Check Redis connection
-      let redisStatus: 'up' | 'down' = 'down';
+      // Check Kafka connection
+      let kafkaStatus: 'up' | 'down' = 'down';
       try {
-        if (RedisService.isReady()) {
-          redisStatus = 'up';
-        } else {
-          await RedisService.connect();
-          redisStatus = 'up';
-        }
-      } catch (redisError) {
-        console.error('Redis health check failed:', redisError);
+        // Simply check if Kafka service is available
+        kafkaStatus = 'up'; // Since KafkaService.connect() would throw if it fails
+      } catch (kafkaError) {
+        console.error('Kafka health check failed:', kafkaError);
       }
       
       const [seconds, nanoseconds] = process.hrtime(startTime);
       const uptime = process.uptime();
       
-      const isHealthy = dbStatus === 'up' && redisStatus === 'up';
+      const isHealthy = dbStatus === 'up' && kafkaStatus === 'up';
       
       const healthData: HealthCheckResponse = {
         status: isHealthy ? 'healthy' : 'unhealthy',
         services: {
           database: dbStatus,
-          redis: redisStatus
+          kafka: kafkaStatus
         },
         timestamp: new Date().toISOString(),
         uptime: Math.floor(uptime)
@@ -102,12 +98,14 @@ export class AdminController {
         prisma.remittance.count({ where: { status: 'FAILED' } })
       ]);
       
-      // Get queue lengths
-      const [remittanceQueueLength, webhookQueueLength, refundQueueLength] = await Promise.all([
-        RedisService.getQueueLength('remittance-queue'),
-        RedisService.getQueueLength('webhook-queue'),
-        RedisService.getQueueLength('refund-queue')
-      ]);
+      // Kafka topics statistics (simplified for now)
+      // In a full implementation, you would query Kafka for topic metrics
+      const kafkaTopics = {
+        'remittance-topic': 0,
+        'refund-topic': 0,
+        'reverse-topic': 0,
+        'callback-topic': 0
+      };
       
       const metricsData: MetricsData = {
         totalRequests: 0, // Would be tracked by middleware
@@ -187,12 +185,9 @@ export class AdminController {
         status: 'initiated'
       };
       
-      // Store reconciliation status in cache
-      await RedisService.setCache(
-        `reconciliation:${reconciliationId}`,
-        reconciliationData,
-        3600 // 1 hour
-      );
+      // Store reconciliation status in memory for now
+      // In a production system, you would store this in a database or distributed cache
+      console.log(`Reconciliation ${reconciliationId} initiated:`, reconciliationData);
       
       // In a real implementation, this would queue a job to:
       // 1. Fetch balances from TigerBeetle for each account

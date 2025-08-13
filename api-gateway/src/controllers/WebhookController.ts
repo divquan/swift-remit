@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database';
 import { config } from '../config';
 import { ApiResponse, WebhookPayload, QueueJob, ExchangeRateUpdate } from '../types';
-import { RedisService } from '../services/RedisService';
+import { KafkaService } from '../services/KafkaService';
 
 export class WebhookController {
   /**
@@ -65,7 +65,7 @@ export class WebhookController {
       };
       
       // Queue for processing
-      await RedisService.enqueueJob('webhook-queue', job);
+      await KafkaService.publishJob('callback-topic', job);
       
       // Log audit trail
       await prisma.auditLog.create({
@@ -163,32 +163,37 @@ export class WebhookController {
         }
       });
       
-      // Cache the rate for quick access
-      const cacheKey = `fx-rate:${fromCurrency}:${toCurrency}`;
-      await RedisService.setCache(cacheKey, {
-        rate,
-        provider,
-        timestamp: new Date().toISOString()
-      }, 300); // 5 minutes cache
+      // Store rate in database for persistence
+      console.log(`FX Rate updated: ${fromCurrency}/${toCurrency} = ${rate} (${provider})`);
       
-      // Publish rate update to subscribers
-      await RedisService.publish('fx-rate-updates', {
-        fromCurrency,
-        toCurrency,
-        rate,
-        provider,
-        timestamp: new Date().toISOString()
-      });
+      // Publish rate update to Kafka topic
+      const fxRateJob: QueueJob = {
+        id: uuidv4(),
+        type: 'FX_RATE_UPDATE',
+        data: {
+          fromCurrency,
+          toCurrency,
+          rate,
+          provider,
+          timestamp: new Date().toISOString()
+        }
+      };
+      await KafkaService.publishJob('fx-rate-updates', fxRateJob);
       
       const response: ApiResponse = {
         success: true,
         message: 'Exchange rate updated successfully',
-        data: exchangeRate,
+        data: {
+          fromCurrency,
+          toCurrency,
+          rate,
+          provider
+        },
         timestamp: new Date().toISOString(),
         requestId: req.headers['x-request-id'] as string || 'unknown'
       };
       
-  return res.json(response);
+      return res.json(response);
     } catch (error) {
       console.error('FX rate update error:', error);
       
@@ -200,7 +205,7 @@ export class WebhookController {
         requestId: req.headers['x-request-id'] as string || 'unknown'
       };
       
-  return res.status(500).json(response);
+      return res.status(500).json(response);
     }
   }
 

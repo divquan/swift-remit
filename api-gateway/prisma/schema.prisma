@@ -1,198 +1,181 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-    provider      = "prisma-client-js"
-    binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-model User {
-    id            String    @id @default(cuid())
-    email         String    @unique
-    password      String
-    firstName     String
-    lastName      String
-    phoneNumber   String?
-    countryCode   String    @default("GH")
-    kycStatus     KycStatus @default(PENDING)
-    isActive      Boolean   @default(true)
-    emailVerified Boolean   @default(false)
-    phoneVerified Boolean   @default(false)
-    createdAt     DateTime  @default(now())
-    updatedAt     DateTime  @updatedAt
-    lastLoginAt   DateTime?
-
-    // Relations
-    accounts    Account[]
-    remittances Remittance[]
-    auditLogs   AuditLog[]
-
-    @@map("users")
+model accounts {
+  id                                                  String         @id
+  userId                                              String
+  accountType                                         AccountType    @default(PERSONAL)
+  currency                                            String         @default("GHS")
+  status                                              AccountStatus  @default(ACTIVE)
+  createdAt                                           DateTime       @default(now())
+  updatedAt                                           DateTime
+  balance                                             Decimal        @default(0) @db.Decimal(15, 2)
+  users                                               users          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remittances_remittances_senderAccountIdToaccounts   remittances[]  @relation("remittances_senderAccountIdToaccounts")
+  remittances_remittances_receiverAccountIdToaccounts remittances[]  @relation("remittances_receiverAccountIdToaccounts")
+  transactions_transactions_creditAccountIdToaccounts transactions[] @relation("transactions_creditAccountIdToaccounts")
+  transactions_transactions_debitAccountIdToaccounts  transactions[] @relation("transactions_debitAccountIdToaccounts")
 }
 
-model Account {
-    id          String        @id @default(cuid())
-    userId      String
-    accountType AccountType   @default(PERSONAL)
-    currency    String        @default("GHS")
-    balance     Decimal       @default(0) @db.Decimal(15, 2)
-    status      AccountStatus @default(ACTIVE)
-    createdAt   DateTime      @default(now())
-    updatedAt   DateTime      @updatedAt
-
-    // Relations
-    user                    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-    sentRemittances         Remittance[]     @relation("SenderAccount")
-    receivedRemittances     Remittance[]     @relation("ReceiverAccount")
-    debitTransactions       Transaction[]    @relation("DebitAccount")
-    creditTransactions      Transaction[]    @relation("CreditAccount")
-
-    @@map("accounts")
+model api_keys {
+  id          String    @id
+  name        String
+  keyHash     String    @unique
+  permissions Json
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+  expiresAt   DateTime?
 }
 
-model Remittance {
-    id                String           @id @default(cuid())
-    idempotencyKey    String           @unique
-    senderAccountId   String
-    receiverAccountId String?
-    receiverDetails   Json // Store receiver info for cross-border
-    amount            Decimal          @db.Decimal(15, 2)
-    currency          String
-    exchangeRate      Decimal?         @db.Decimal(10, 6)
-    convertedAmount   Decimal?         @db.Decimal(15, 2)
-    convertedCurrency String?
-    fee               Decimal          @db.Decimal(15, 2)
-    status            RemittanceStatus @default(PENDING)
-    paymentProvider   String?
-    providerTxnId     String?
-    failureReason     String?
-    metadata          Json?
-    createdAt         DateTime         @default(now())
-    updatedAt         DateTime         @updatedAt
-    completedAt       DateTime?
+model audit_logs {
+  id           String       @id
+  userId       String?
+  remittanceId String?
+  action       String
+  resource     String
+  details      Json
+  ipAddress    String?
+  userAgent    String?
+  service      String?
+  level        String       @default("INFO")
+  timestamp    DateTime     @default(now())
+  createdAt    DateTime     @default(now())
+  remittances  remittances? @relation(fields: [remittanceId], references: [id])
+  users        users?       @relation(fields: [userId], references: [id])
 
-    // Relations
-    senderAccount   Account       @relation("SenderAccount", fields: [senderAccountId], references: [id], map: "fk_remittance_senderAccountId")
-    receiverAccount Account?      @relation("ReceiverAccount", fields: [receiverAccountId], references: [id])
-    user            User          @relation(fields: [senderAccountId], references: [id], map: "fk_remittance_user_senderAccountId")
-    auditLogs       AuditLog[]
-    transactions    Transaction[]
-
-    @@map("remittances")
+  @@index([userId])
+  @@index([remittanceId])
+  @@index([action])
+  @@index([resource])
+  @@index([service])
+  @@index([level])
+  @@index([timestamp])
 }
 
-model AuditLog {
-    id           String   @id @default(cuid())
-    userId       String?
-    remittanceId String?
-    action       String
-    resource     String
-    details      Json
-    ipAddress    String?
-    userAgent    String?
-    createdAt    DateTime @default(now())
+model exchange_rates {
+  id           String   @id
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(10, 6)
+  provider     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
 
-    // Relations
-    user       User?       @relation(fields: [userId], references: [id])
-    remittance Remittance? @relation(fields: [remittanceId], references: [id])
-
-    @@map("audit_logs")
+  @@unique([fromCurrency, toCurrency])
 }
 
-model ApiKey {
-    id          String    @id @default(cuid())
-    name        String
-    keyHash     String    @unique
-    permissions Json // Array of permissions
-    isActive    Boolean   @default(true)
-    lastUsedAt  DateTime?
-    createdAt   DateTime  @default(now())
-    updatedAt   DateTime  @updatedAt
-    expiresAt   DateTime?
-
-    @@map("api_keys")
+model remittances {
+  id                                               String           @id
+  idempotencyKey                                   String           @unique
+  senderAccountId                                  String
+  receiverAccountId                                String?
+  receiverDetails                                  Json
+  amount                                           Decimal          @db.Decimal(15, 2)
+  currency                                         String
+  exchangeRate                                     Decimal?         @db.Decimal(10, 6)
+  convertedAmount                                  Decimal?         @db.Decimal(15, 2)
+  convertedCurrency                                String?
+  fee                                              Decimal          @db.Decimal(15, 2)
+  status                                           RemittanceStatus @default(PENDING)
+  paymentProvider                                  String?
+  providerTxnId                                    String?
+  failureReason                                    String?
+  metadata                                         Json?
+  createdAt                                        DateTime         @default(now())
+  updatedAt                                        DateTime
+  completedAt                                      DateTime?
+  audit_logs                                       audit_logs[]
+  accounts_remittances_senderAccountIdToaccounts   accounts         @relation("remittances_senderAccountIdToaccounts", fields: [senderAccountId], references: [id], map: "fk_remittance_senderAccountId")
+  accounts_remittances_receiverAccountIdToaccounts accounts?        @relation("remittances_receiverAccountIdToaccounts", fields: [receiverAccountId], references: [id])
+  transactions                                     transactions[]
 }
 
-model ExchangeRate {
-    id           String   @id @default(cuid())
-    fromCurrency String
-    toCurrency   String
-    rate         Decimal  @db.Decimal(10, 6)
-    provider     String
-    createdAt    DateTime @default(now())
-    updatedAt    DateTime @updatedAt
-
-    @@unique([fromCurrency, toCurrency])
-    @@map("exchange_rates")
+model transactions {
+  id                                              String            @id
+  debitAccountId                                  String?
+  creditAccountId                                 String?
+  amount                                          Decimal           @db.Decimal(15, 2)
+  currency                                        String
+  type                                            TransactionType
+  status                                          TransactionStatus @default(PENDING)
+  description                                     String?
+  reference                                       String?           @unique
+  remittanceId                                    String?
+  metadata                                        Json?
+  createdAt                                       DateTime          @default(now())
+  updatedAt                                       DateTime
+  accounts_transactions_creditAccountIdToaccounts accounts?         @relation("transactions_creditAccountIdToaccounts", fields: [creditAccountId], references: [id])
+  accounts_transactions_debitAccountIdToaccounts  accounts?         @relation("transactions_debitAccountIdToaccounts", fields: [debitAccountId], references: [id])
+  remittances                                     remittances?      @relation(fields: [remittanceId], references: [id])
 }
 
-model Transaction {
-    id              String            @id @default(cuid())
-    debitAccountId  String?
-    creditAccountId String?
-    amount          Decimal           @db.Decimal(15, 2)
-    currency        String
-    type            TransactionType
-    status          TransactionStatus @default(PENDING)
-    description     String?
-    reference       String?           @unique
-    remittanceId    String?
-    metadata        Json?
-    createdAt       DateTime          @default(now())
-    updatedAt       DateTime          @updatedAt
-
-    // Relations
-    debitAccount  Account?    @relation("DebitAccount", fields: [debitAccountId], references: [id])
-    creditAccount Account?    @relation("CreditAccount", fields: [creditAccountId], references: [id])
-    remittance    Remittance? @relation(fields: [remittanceId], references: [id])
-
-    @@map("transactions")
-}
-
-enum TransactionType {
-    TRANSFER
-    DEPOSIT
-    WITHDRAWAL
-    FEE
-    REFUND
-}
-
-enum TransactionStatus {
-    PENDING
-    COMPLETED
-    FAILED
-    REVERSED
-}
-
-enum KycStatus {
-    PENDING
-    VERIFIED
-    REJECTED
-    EXPIRED
-}
-
-enum AccountType {
-    PERSONAL
-    BUSINESS
-    MERCHANT
+model users {
+  id            String       @id
+  email         String       @unique
+  password      String
+  firstName     String
+  lastName      String
+  phoneNumber   String?
+  countryCode   String       @default("GH")
+  kycStatus     KycStatus    @default(PENDING)
+  isActive      Boolean      @default(true)
+  emailVerified Boolean      @default(false)
+  phoneVerified Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime
+  lastLoginAt   DateTime?
+  accounts      accounts[]
+  audit_logs    audit_logs[]
 }
 
 enum AccountStatus {
-    ACTIVE
-    SUSPENDED
-    CLOSED
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum AccountType {
+  PERSONAL
+  BUSINESS
+  MERCHANT
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
 }
 
 enum RemittanceStatus {
-    PENDING
-    PROCESSING
-    COMPLETED
-    FAILED
-    CANCELLED
-    REFUNDED
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum TransactionType {
+  TRANSFER
+  DEPOSIT
+  WITHDRAWAL
+  FEE
+  REFUND
 }

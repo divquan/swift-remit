@@ -61,7 +61,7 @@ export class QueueService {
    * Add remittance job to processing queue
    */
   async addRemittanceJob(jobData: RemittanceJobData, priority = 0): Promise<Bull.Job<RemittanceJobData>> {
-    return this.remittanceQueue.add('process-remittance', jobData, {
+    return this.remittanceQueue.add('remittance-queue', jobData, {
       priority,
       jobId: jobData.idempotencyKey, // Use idempotency key as job ID to prevent duplicates
       delay: 0,
