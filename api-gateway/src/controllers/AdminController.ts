@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database';
 import { config } from '../config';
 import { ApiResponse, HealthCheckResponse, MetricsData } from '../types';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { KafkaService } from '../services/KafkaService';
 
 export class AdminController {
@@ -10,8 +12,24 @@ export class AdminController {
    * /health:
    *   get:
    *     summary: Health check endpoint
-   *     tags: [Admin]
-   *     responses:
+   *     tag        requestId: req.headers['x-request-id'] as string || 'unknown'
+      };
+
+      return res.status(200).json(response);
+    } catch (error) {
+      console.error('List accounts error:', error);
+
+      const response: ApiResponse = {
+        success: false,
+        message: 'Failed to retrieve accounts',
+        error: config.server.env === 'development' ? (error as Error).message : undefined,
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string || 'unknown'
+      };
+
+      return res.status(500).json(response);
+    }
+  }  responses:
    *       200:
    *         description: Service is healthy
    *       503:
@@ -220,6 +238,277 @@ export class AdminController {
       };
       
       res.status(500).json(response);
+    }
+  }
+
+  /**
+   * @swagger
+   * /admin/accounts/{accountId}/fund:
+   *   post:
+   *     summary: Fund an account (Admin only)
+   *     tags: [Admin]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: accountId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Account ID to fund
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - amount
+   *             properties:
+   *               amount:
+   *                 type: number
+   *                 description: Amount to fund
+   *               currency:
+   *                 type: string
+   *                 description: Currency (optional, defaults to account currency)
+   *               description:
+   *                 type: string
+   *                 description: Description for the funding
+   *     responses:
+   *       200:
+   *         description: Account funded successfully
+   *       400:
+   *         description: Invalid request
+   *       404:
+   *         description: Account not found
+   */
+  static async fundAccount(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { accountId } = req.params;
+      const { amount, currency, description } = req.body;
+      const adminUserId = req.user!.userId;
+
+      // Validate input
+      if (!amount || amount <= 0) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Invalid amount. Must be greater than 0',
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        };
+        return res.status(400).json(response);
+      }
+
+      // Find the account
+      const account = await prisma.account.findUnique({
+        where: { id: accountId },
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true
+            }
+          }
+        }
+      });
+
+      if (!account) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Account not found',
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        };
+        return res.status(404).json(response);
+      }
+
+      // Perform funding transaction
+      const fundingResult = await prisma.$transaction(async (prisma) => {
+        // Create funding transaction record
+        const transaction = await prisma.transaction.create({
+          data: {
+            id: uuidv4(),
+            creditAccountId: accountId,
+            amount: amount,
+            currency: currency || account.currency,
+            type: 'DEPOSIT',
+            status: 'COMPLETED',
+            description: description || `Admin funding - ${amount} ${currency || account.currency}`,
+            reference: `ADMIN-FUND-${Date.now()}`,
+            metadata: {
+              fundedBy: adminUserId,
+              adminFunding: true,
+              timestamp: new Date().toISOString()
+            },
+            updatedAt: new Date()
+          }
+        });
+
+        // Update account balance
+        const updatedAccount = await prisma.account.update({
+          where: { id: accountId },
+          data: {
+            balance: {
+              increment: amount
+            },
+            updatedAt: new Date()
+          }
+        });
+
+        return { transaction, updatedAccount };
+      });
+
+      // Log audit event
+      await prisma.auditLog.create({
+        data: {
+          id: uuidv4(),
+          action: 'ACCOUNT_FUNDED',
+          resource: 'ACCOUNT',
+          details: {
+            accountId,
+            amount,
+            currency: currency || account.currency,
+            description,
+            transactionId: fundingResult.transaction.id,
+            accountHolder: `${account.user.firstName} ${account.user.lastName}`,
+            newBalance: fundingResult.updatedAccount.balance
+          },
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          userId: adminUserId
+        }
+      });
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Account funded successfully',
+        data: {
+          accountId,
+          transactionId: fundingResult.transaction.id,
+          amount,
+          currency: currency || account.currency,
+          newBalance: Number(fundingResult.updatedAccount.balance),
+          accountHolder: `${account.user.firstName} ${account.user.lastName}`,
+          fundedAt: new Date().toISOString()
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string || 'unknown'
+      };
+
+      return res.status(200).json(response);
+    } catch (error) {
+      console.error('Fund account error:', error);
+
+      const response: ApiResponse = {
+        success: false,
+        message: 'Failed to fund account',
+        error: config.server.env === 'development' ? (error as Error).message : undefined,
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string || 'unknown'
+      };
+
+      return res.status(500).json(response);
+    }
+  }
+
+  /**
+   * @swagger
+   * /admin/accounts:
+   *   get:
+   *     summary: List all accounts (Admin only)
+   *     tags: [Admin]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: page
+   *         schema:
+   *           type: integer
+   *           default: 1
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 20
+   *       - in: query
+   *         name: currency
+   *         schema:
+   *           type: string
+   *         description: Filter by currency
+   *     responses:
+   *       200:
+   *         description: Accounts retrieved successfully
+   */
+  static async listAccounts(req: AuthenticatedRequest, res: Response) {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+      const currency = req.query.currency as string;
+      const skip = (page - 1) * limit;
+
+      const whereClause: any = {};
+      if (currency) {
+        whereClause.currency = currency;
+      }
+
+      const [accounts, total] = await Promise.all([
+        prisma.account.findMany({
+          where: whereClause,
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit
+        }),
+        prisma.account.count({ where: whereClause })
+      ]);
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Accounts retrieved successfully',
+        data: {
+          accounts: accounts.map(account => ({
+            id: account.id,
+            balance: Number(account.balance),
+            currency: account.currency,
+            accountType: account.accountType,
+            status: account.status,
+            createdAt: account.createdAt,
+            user: account.user
+          })),
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+          }
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string || 'unknown'
+      };
+
+      return res.status(200).json(response);
+    } catch (error) {
+      console.error('List accounts error:', error);
+
+      const response: ApiResponse = {
+        success: false,
+        message: 'Failed to retrieve accounts',
+        error: config.server.env === 'development' ? (error as Error).message : undefined,
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string || 'unknown'
+      };
+
+      return res.status(500).json(response);
     }
   }
 }

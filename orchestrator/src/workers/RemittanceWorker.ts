@@ -27,17 +27,25 @@ export class RemittanceWorker {
         eachMessage: async ({ topic, partition, message }) => {
           try {
             const jobData = JSON.parse(message.value!.toString());
-            console.log(`Processing remittance job from topic ${topic}:`, jobData);
+            console.log(`Processing job from topic ${topic}:`, jobData);
 
-            const result = await this.orchestrator.startRemittance(jobData.data);
+            let result;
+
+            // Handle different job types
+            if (jobData.type === 'PROCESS_FUNDING') {
+              result = await this.orchestrator.processFunding(jobData.data);
+            } else {
+              // Default to remittance processing for backward compatibility
+              result = await this.orchestrator.startRemittance(jobData.data || jobData);
+            }
             
             if (!result.success) {
-              throw new Error(result.errorMessage || 'Remittance processing failed');
+              throw new Error(result.errorMessage || 'Job processing failed');
             }
 
-            console.log(`Remittance job completed successfully:`, result);
+            console.log(`Job completed successfully:`, result);
           } catch (error) {
-            console.error(`Remittance job failed:`, error);
+            console.error(`Job failed:`, error);
             // In a production system, you might want to send failed jobs to a dead letter queue
           }
         },

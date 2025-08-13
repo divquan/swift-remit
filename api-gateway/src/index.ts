@@ -96,13 +96,40 @@ class App {
     this.app.use(errorHandler);
   }
 
+  private async initializeKafkaWithRetry(): Promise<void> {
+    const maxRetries = 10;
+    let retryCount = 0;
+    
+    const tryConnect = async () => {
+      try {
+        await KafkaService.connect();
+        console.log('✅ Kafka connected successfully');
+        // Store Kafka service globally for controller access
+        (global as any).kafkaService = KafkaService;
+        return true;
+      } catch (error) {
+        retryCount++;
+        console.log(`⚠️ Kafka connection attempt ${retryCount}/${maxRetries} failed. Retrying in 5 seconds...`);
+        
+        if (retryCount >= maxRetries) {
+          console.error('❌ Failed to connect to Kafka after maximum retries. Continuing without Kafka...');
+          return false;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return tryConnect();
+      }
+    };
+    
+    // Run in background, don't block startup
+    tryConnect().catch(error => {
+      console.error('❌ Kafka connection failed completely:', error);
+    });
+  }
+
   public async start(): Promise<void> {
     try {
-      // Initialize Kafka connection
-      await KafkaService.connect();
-      console.log('✅ Kafka connected successfully');
-
-      // Start server
+      // Start server first
       const server = this.app.listen(config.server.port, () => {
         console.log(`🚀 SwiftRemit API Gateway running on port ${config.server.port}`);
         console.log(`📚 API Documentation available at http://localhost:${config.server.port}/docs`);
@@ -110,6 +137,9 @@ class App {
         console.log(`📊 Metrics available at http://localhost:${config.server.port}/metrics`);
         console.log(`🌍 Environment: ${config.server.env}`);
       });
+
+      // Initialize Kafka connection with retry logic (non-blocking)
+      this.initializeKafkaWithRetry();
 
       // Graceful shutdown
       process.on('SIGTERM', async () => {

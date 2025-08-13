@@ -28,6 +28,10 @@ export const CONFIG = {
   PAYMENT_PROVIDER_URL: process.env.MOCK_PAYMENT_PROVIDER_URL || 'http://localhost:3003',
   AUDIT_LOGGER_URL: process.env.AUDIT_LOGGER_URL || 'http://localhost:3004',
   
+  // Paystack Configuration
+  PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY || 'sk_test_your_secret_key_here',
+  PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_your_public_key_here',
+  
   // Logging
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
   

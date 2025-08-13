@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database';
 import { config } from '../config';
-import { ApiResponse, CreateAccountRequest } from '../types';
+import { ApiResponse, CreateAccountRequest, QueueJob } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 
@@ -359,6 +359,163 @@ export class AccountController {
       const response: ApiResponse = {
         success: false,
         message: 'Failed to retrieve transactions',
+        error: config.server.env === 'development' ? (error as Error).message : undefined,
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string
+      };
+      
+      return res.status(500).json(response);
+    }
+  }
+
+  /**
+   * @swagger
+   * /accounts/{id}/fund:
+   *   post:
+   *     summary: Fund user account
+   *     tags: [Accounts]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - amount
+   *               - currency
+   *               - paymentMethod
+   *             properties:
+   *               amount:
+   *                 type: number
+   *                 minimum: 0.01
+   *                 example: 100.00
+   *               currency:
+   *                 type: string
+   *                 example: GHS
+   *               paymentMethod:
+   *                 type: string
+   *                 enum: [MOBILE_MONEY, BANK_TRANSFER, CARD]
+   *               provider:
+   *                 type: string
+   *                 example: MTN
+   *               phoneNumber:
+   *                 type: string
+   *                 example: "+233241234567"
+   *     responses:
+   *       200:
+   *         description: Funding initiated successfully
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: Account not found
+   */
+  static async fundAccount(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id: accountId } = req.params;
+      const userId = req.user!.userId;
+      const { amount, currency, paymentMethod, provider, phoneNumber } = req.body;
+
+      // Validate amount
+      if (!amount || amount <= 0) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Amount must be greater than 0',
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string
+        };
+        return res.status(400).json(response);
+      }
+
+      // Verify account belongs to user
+      const account = await prisma.account.findFirst({
+        where: {
+          id: accountId,
+          userId // Ensure user can only fund their own accounts
+        }
+      });
+
+      if (!account) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Account not found or access denied',
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string
+        };
+        return res.status(404).json(response);
+      }
+
+      // Create funding transaction record
+      const transaction = await prisma.transaction.create({
+        data: {
+          id: uuidv4(),
+          creditAccountId: accountId, // For funding, this is a credit to the account
+          type: 'DEPOSIT',
+          amount: parseFloat(amount.toString()),
+          currency,
+          description: `Account funding via ${paymentMethod}`,
+          status: 'PENDING',
+          reference: `fund_${uuidv4()}`,
+          metadata: {
+            paymentMethod,
+            provider,
+            phoneNumber,
+            fundingType: 'USER_INITIATED'
+          }
+        }
+      });
+
+      // Queue payment processing job
+      const kafkaService = (global as any).kafkaService;
+      if (kafkaService) {
+        const job: QueueJob = {
+          id: transaction.id,
+          type: 'PROCESS_FUNDING',
+          data: {
+            type: 'PROCESS_FUNDING',
+            transactionId: transaction.id,
+            accountId,
+            userId,
+            amount,
+            currency,
+            paymentMethod,
+            provider,
+            phoneNumber,
+            reference: transaction.reference
+          }
+        };
+        
+        await kafkaService.publishJob('remittance-topic', job);
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Account funding initiated successfully',
+        data: {
+          transactionId: transaction.id,
+          reference: transaction.reference,
+          amount,
+          currency,
+          status: 'PENDING'
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string
+      };
+
+      return res.json(response);
+    } catch (error) {
+      console.error('Fund account error:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        message: 'Failed to initiate account funding',
         error: config.server.env === 'development' ? (error as Error).message : undefined,
         timestamp: new Date().toISOString(),
         requestId: req.headers['x-request-id'] as string

@@ -40,6 +40,13 @@ export const config = {
     bcryptRounds: 12,
   },
   
+  // Paystack Configuration
+  paystack: {
+    secretKey: process.env.PAYSTACK_SECRET_KEY || 'sk_test_your_secret_key_here',
+    publicKey: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_your_public_key_here',
+    webhookSecret: process.env.PAYSTACK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET!,
+  },
+  
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),

@@ -38,10 +38,10 @@ export class WebhookController {
     try {
       const { provider } = req.params;
       const payload = req.body;
-      const signature = req.headers['x-webhook-signature'] as string;
+      const signature = req.headers['x-paystack-signature'] as string;
       
-      // Verify webhook signature
-      if (!this.verifyWebhookSignature(payload, signature, provider)) {
+      // Verify webhook signature for Paystack
+      if (provider === 'paystack' && !this.verifyPaystackSignature(payload, signature)) {
         const response: ApiResponse = {
           success: false,
           message: 'Invalid webhook signature',
@@ -49,6 +49,26 @@ export class WebhookController {
           requestId: req.headers['x-request-id'] as string || 'unknown'
         };
         return res.status(401).json(response);
+      }
+      
+      // Process webhook based on provider
+      switch (provider.toLowerCase()) {
+        case 'paystack':
+          await this.handlePaystackWebhook(payload, req);
+          break;
+        default:
+          // Verify webhook signature for other providers
+          if (!this.verifyWebhookSignature(payload, signature, provider)) {
+            const response: ApiResponse = {
+              success: false,
+              message: 'Invalid webhook signature',
+              timestamp: new Date().toISOString(),
+              requestId: req.headers['x-request-id'] as string || 'unknown'
+            };
+            return res.status(401).json(response);
+          }
+          await this.handleGenericWebhook(payload, provider, req);
+          break;
       }
       
       // Create webhook processing job
@@ -251,5 +271,197 @@ export class WebhookController {
       console.error('Signature verification error:', error);
       return false;
     }
+  }
+
+  /**
+   * Verify Paystack webhook signature
+   */
+  private static verifyPaystackSignature(payload: any, signature: string): boolean {
+    if (!signature) return false;
+    
+    try {
+      const payloadString = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      const paystackSecret = config.paystack.webhookSecret;
+      
+      const hash = crypto
+        .createHmac('sha512', paystackSecret)
+        .update(payloadString)
+        .digest('hex');
+      
+      return hash === signature;
+    } catch (error) {
+      console.error('Paystack signature verification failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Handle Paystack webhook events
+   */
+  private static async handlePaystackWebhook(payload: any, req: Request): Promise<void> {
+    const { event, data } = payload;
+    
+    switch (event) {
+      case 'charge.success':
+        await this.handlePaystackChargeSuccess(data, req);
+        break;
+      case 'transfer.success':
+        await this.handlePaystackTransferSuccess(data, req);
+        break;
+      case 'transfer.failed':
+        await this.handlePaystackTransferFailed(data, req);
+        break;
+      case 'charge.failed':
+        await this.handlePaystackChargeFailed(data, req);
+        break;
+      default:
+        console.log(`Unhandled Paystack webhook event: ${event}`);
+    }
+  }
+
+  /**
+   * Handle successful Paystack charge (card payment)
+   */
+  private static async handlePaystackChargeSuccess(data: any, req: Request): Promise<void> {
+    const remittanceId = data.metadata?.remittanceId;
+    if (!remittanceId) return;
+
+    // Create webhook processing job
+    const job: QueueJob = {
+      id: uuidv4(),
+      type: 'WEBHOOK_PROCESSING',
+      data: {
+        provider: 'paystack',
+        event: 'charge.success',
+        remittanceId,
+        transactionId: data.reference,
+        amount: data.amount / 100, // Convert from kobo
+        currency: data.currency,
+        status: 'success',
+        metadata: {
+          channel: data.channel,
+          gateway_response: data.gateway_response,
+          fees: data.fees / 100
+        },
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Queue for processing
+    await KafkaService.publishJob('callback-topic', job);
+  }
+
+  /**
+   * Handle successful Paystack transfer (bank transfer/mobile money)
+   */
+  private static async handlePaystackTransferSuccess(data: any, req: Request): Promise<void> {
+    const remittanceId = data.metadata?.remittanceId;
+    if (!remittanceId) return;
+
+    // Create webhook processing job
+    const job: QueueJob = {
+      id: uuidv4(),
+      type: 'WEBHOOK_PROCESSING',
+      data: {
+        provider: 'paystack',
+        event: 'transfer.success',
+        remittanceId,
+        transactionId: data.reference,
+        amount: data.amount / 100,
+        currency: data.currency,
+        status: 'success',
+        metadata: {
+          transfer_code: data.transfer_code,
+          recipient: data.recipient
+        },
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Queue for processing
+    await KafkaService.publishJob('callback-topic', job);
+  }
+
+  /**
+   * Handle failed Paystack transfer
+   */
+  private static async handlePaystackTransferFailed(data: any, req: Request): Promise<void> {
+    const remittanceId = data.metadata?.remittanceId;
+    if (!remittanceId) return;
+
+    // Create webhook processing job
+    const job: QueueJob = {
+      id: uuidv4(),
+      type: 'WEBHOOK_PROCESSING',
+      data: {
+        provider: 'paystack',
+        event: 'transfer.failed',
+        remittanceId,
+        transactionId: data.reference,
+        amount: data.amount / 100,
+        currency: data.currency,
+        status: 'failed',
+        failureReason: data.failure_reason || 'Transfer failed',
+        metadata: {
+          transfer_code: data.transfer_code,
+          recipient: data.recipient
+        },
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Queue for processing
+    await KafkaService.publishJob('callback-topic', job);
+  }
+
+  /**
+   * Handle failed Paystack charge
+   */
+  private static async handlePaystackChargeFailed(data: any, req: Request): Promise<void> {
+    const remittanceId = data.metadata?.remittanceId;
+    if (!remittanceId) return;
+
+    // Create webhook processing job
+    const job: QueueJob = {
+      id: uuidv4(),
+      type: 'WEBHOOK_PROCESSING',
+      data: {
+        provider: 'paystack',
+        event: 'charge.failed',
+        remittanceId,
+        transactionId: data.reference,
+        amount: data.amount / 100,
+        currency: data.currency,
+        status: 'failed',
+        failureReason: data.gateway_response || 'Charge failed',
+        metadata: {
+          channel: data.channel,
+          gateway_response: data.gateway_response
+        },
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Queue for processing
+    await KafkaService.publishJob('callback-topic', job);
+  }
+
+  /**
+   * Handle generic webhook for other providers
+   */
+  private static async handleGenericWebhook(payload: any, provider: string, req: Request): Promise<void> {
+    // Extract webhook data and create job
+    const job: QueueJob = {
+      id: uuidv4(),
+      type: 'WEBHOOK_PROCESSING',
+      data: {
+        provider,
+        payload,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Queue job to Kafka
+    await KafkaService.publishJob('webhook-processing', job);
   }
 }

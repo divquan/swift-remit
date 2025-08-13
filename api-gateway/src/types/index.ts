@@ -71,7 +71,7 @@ export interface WebhookPayload {
 
 export interface QueueJob {
   id: string;
-  type: 'REMITTANCE' | 'REFUND' | 'REVERSE' | 'WEBHOOK_PROCESSING' | 'FX_RATE_UPDATE';
+  type: 'REMITTANCE' | 'REFUND' | 'REVERSE' | 'WEBHOOK_PROCESSING' | 'FX_RATE_UPDATE' | 'PROCESS_FUNDING';
   data: Record<string, any>;
   priority?: number;
   delay?: number;

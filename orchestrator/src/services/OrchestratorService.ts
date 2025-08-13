@@ -399,6 +399,8 @@ export class OrchestratorService {
         remittanceId: jobData.remittanceId,
         amount: jobData.amount,
         currency: jobData.currency,
+        paymentMethod: 'MOBILE_MONEY', // Default for remittances
+        reference: `remit_${jobData.remittanceId}`,
         senderDetails: {
           accountId: jobData.senderAccountId,
           name: 'Sender Name', // TODO: Get from user data
@@ -561,6 +563,220 @@ export class OrchestratorService {
     } catch (error) {
       console.error('Error processing payment callback:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Process account funding request
+   */
+  async processFunding(jobData: any): Promise<RemittanceProcessingResult> {
+    const { 
+      transactionId, 
+      accountId, 
+      userId, 
+      amount, 
+      currency, 
+      paymentMethod, 
+      provider, 
+      phoneNumber, 
+      reference 
+    } = jobData;
+
+    try {
+      // Use Prisma transaction for atomicity
+      const result = await db.$transaction(async (prisma) => {
+        // 1. Verify transaction exists and is pending
+        const transaction = await prisma.transactions.findUnique({
+          where: { id: transactionId },
+        });
+
+        if (!transaction) {
+          throw new Error(`Transaction ${transactionId} not found`);
+        }
+
+        if (transaction.status !== TransactionStatus.PENDING) {
+          throw new Error(`Transaction ${transactionId} is not in pending status`);
+        }
+
+        // 2. Verify account exists and belongs to user
+        const account = await prisma.accounts.findUnique({
+          where: { id: accountId },
+        });
+
+        if (!account) {
+          throw new Error(`Account ${accountId} not found`);
+        }
+
+        if (account.userId !== userId) {
+          throw new Error(`Account ${accountId} does not belong to user ${userId}`);
+        }
+
+        // 3. Process payment through payment provider
+        const paymentRequest: PaymentProviderRequest = {
+          amount,
+          currency,
+          paymentMethod,
+          provider,
+          phoneNumber,
+          reference,
+          metadata: {
+            accountId,
+            userId,
+            transactionId,
+            fundingType: 'USER_INITIATED'
+          }
+        };
+
+        console.log('Processing funding payment:', paymentRequest);
+
+        try {
+          const paymentResponse = await this.paymentProvider.processPayment(paymentRequest);
+          
+          if (!paymentResponse.success) {
+            // Update transaction status to failed
+            await prisma.transactions.update({
+              where: { id: transactionId },
+              data: {
+                status: TransactionStatus.FAILED,
+                metadata: {
+                  ...(transaction.metadata as object || {}),
+                  failureReason: paymentResponse.errorMessage || paymentResponse.failureReason,
+                  paymentResponse: JSON.parse(JSON.stringify(paymentResponse))
+                },
+                updatedAt: new Date()
+              }
+            });
+
+            await this.auditLogger.log({
+              userId,
+              action: 'FUNDING_FAILED',
+              resource: 'TRANSACTION',
+              details: {
+                transactionId,
+                accountId,
+                amount,
+                currency,
+                paymentMethod,
+                error: paymentResponse.errorMessage || paymentResponse.failureReason
+              }
+            });
+
+            return {
+              success: false,
+              errorMessage: paymentResponse.errorMessage || paymentResponse.failureReason || 'Payment processing failed'
+            };
+          }
+
+          // 4. If payment initiated successfully, update transaction with payment details
+          await prisma.transactions.update({
+            where: { id: transactionId },
+            data: {
+              status: (paymentResponse.requiresConfirmation ?? true) ? TransactionStatus.PENDING : TransactionStatus.COMPLETED,
+              metadata: {
+                ...(transaction.metadata as object || {}),
+                paymentResponse: JSON.parse(JSON.stringify(paymentResponse)),
+                paymentId: paymentResponse.paymentId,
+                paymentReference: paymentResponse.reference
+              },
+              updatedAt: new Date()
+            }
+          });
+
+          // 5. If payment doesn't require confirmation, update account balance immediately
+          if (!paymentResponse.requiresConfirmation) {
+            await prisma.accounts.update({
+              where: { id: accountId },
+              data: {
+                balance: {
+                  increment: amount
+                },
+                updatedAt: new Date()
+              }
+            });
+          }
+
+          await this.auditLogger.log({
+            userId,
+            action: (paymentResponse.requiresConfirmation ?? true) ? 'FUNDING_INITIATED' : 'FUNDING_COMPLETED',
+            resource: 'TRANSACTION',
+            details: {
+              transactionId,
+              accountId,
+              amount,
+              currency,
+              paymentMethod,
+              paymentId: paymentResponse.paymentId,
+              requiresConfirmation: paymentResponse.requiresConfirmation ?? true
+            }
+          });
+
+          return {
+            success: true,
+            transactionId,
+            paymentId: paymentResponse.paymentId,
+            reference: paymentResponse.reference,
+            requiresConfirmation: paymentResponse.requiresConfirmation ?? true,
+            message: (paymentResponse.requiresConfirmation ?? true)
+              ? 'Funding initiated, waiting for payment confirmation'
+              : 'Funding completed successfully'
+          };
+
+        } catch (paymentError) {
+          // Update transaction status to failed
+          await prisma.transactions.update({
+            where: { id: transactionId },
+            data: {
+              status: TransactionStatus.FAILED,
+              metadata: {
+                ...(transaction.metadata as object || {}),
+                failureReason: (paymentError as Error).message,
+                failedAt: new Date().toISOString()
+              },
+              updatedAt: new Date()
+            }
+          });
+
+          await this.auditLogger.log({
+            userId,
+            action: 'FUNDING_FAILED',
+            resource: 'TRANSACTION',
+            details: {
+              transactionId,
+              accountId,
+              amount,
+              currency,
+              paymentMethod,
+              error: (paymentError as Error).message
+            }
+          });
+
+          throw paymentError;
+        }
+      });
+
+      return result as RemittanceProcessingResult;
+
+    } catch (error) {
+      console.error('Funding processing failed:', error);
+      
+      await this.auditLogger.log({
+        userId,
+        action: 'FUNDING_FAILED',
+        resource: 'TRANSACTION',
+        details: {
+          transactionId,
+          accountId,
+          amount,
+          currency,
+          paymentMethod,
+          error: (error as Error).message
+        }
+      });
+
+      return {
+        success: false,
+        errorMessage: (error as Error).message || 'Funding processing failed'
+      } as RemittanceProcessingResult;
     }
   }
 }

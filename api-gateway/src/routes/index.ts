@@ -17,10 +17,18 @@ router.use(`${API_VERSION}/accounts`, accountRoutes);
 router.use(`${API_VERSION}/remittance`, remittanceRoutes);
 router.use(`${API_VERSION}/webhook`, webhookRoutes);
 
-// Admin routes (no version prefix for health checks, etc.)
-router.use('/health', adminRoutes);
-router.use('/metrics', adminRoutes);
-router.use(`${API_VERSION}/reconcile`, adminRoutes);
+// Admin routes
+router.use(`${API_VERSION}/admin`, adminRoutes);
+
+// Health and metrics at root level
+router.get('/health', (req, res, next) => {
+  req.url = '/health';
+  adminRoutes(req, res, next);
+});
+router.get('/metrics', (req, res, next) => {
+  req.url = '/metrics';
+  adminRoutes(req, res, next);
+});
 
 // Root endpoint
 router.get('/', (req, res) => {

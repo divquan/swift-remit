@@ -136,3 +136,28 @@ export const reverseValidation = [
     .isLength({ min: 10, max: 500 }).withMessage('Reason must be between 10 and 500 characters.')
     .trim()
 ];
+
+// ======================
+// Account funding validation rules
+// ======================
+export const fundAccountValidation = [
+  body('amount')
+    .isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0.'),
+
+  body('currency')
+    .isLength({ min: 3, max: 3 }).withMessage('Currency must be a 3-letter ISO code.')
+    .isUppercase().withMessage('Currency must be in uppercase.'),
+
+  body('paymentMethod')
+    .isIn(['MOBILE_MONEY', 'BANK_TRANSFER', 'CARD']).withMessage('Payment method must be MOBILE_MONEY, BANK_TRANSFER, or CARD.'),
+
+  body('provider')
+    .optional()
+    .isLength({ min: 2, max: 50 }).withMessage('Provider must be between 2 and 50 characters.')
+    .trim(),
+
+  body('phoneNumber')
+    .if(body('paymentMethod').equals('MOBILE_MONEY'))
+    .notEmpty().withMessage('Phone number is required for mobile money payments.')
+    .isMobilePhone('any').withMessage('Please enter a valid phone number.')
+];

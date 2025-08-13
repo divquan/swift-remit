@@ -12,23 +12,31 @@ export interface RemittanceJobData {
 }
 
 export interface PaymentProviderRequest {
-  remittanceId: string;
+  remittanceId?: string;
   amount: number;
   currency: string;
-  senderDetails: {
+  paymentMethod: string;
+  provider?: string;
+  phoneNumber?: string;
+  reference: string;
+  senderDetails?: {
     accountId: string;
     name: string;
     email?: string;
   };
-  receiverDetails: any;
+  receiverDetails?: any;
   metadata?: any;
 }
 
 export interface PaymentProviderResponse {
   success: boolean;
   providerTxnId?: string;
+  paymentId?: string;
+  reference?: string;
   status: 'PENDING' | 'COMPLETED' | 'FAILED';
   failureReason?: string;
+  errorMessage?: string;
+  requiresConfirmation?: boolean;
   metadata?: any;
 }
 
@@ -69,10 +77,28 @@ export interface AuditLogData {
 
 export interface RemittanceProcessingResult {
   success: boolean;
-  remittanceId: string;
-  status: 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  remittanceId?: string;
+  transactionId?: string;
+  paymentId?: string;
+  reference?: string;
+  status?: 'PROCESSING' | 'COMPLETED' | 'FAILED';
   transactionIds?: string[];
+  requiresConfirmation?: boolean;
+  message?: string;
   errorMessage?: string;
+}
+
+export interface FundingJobData {
+  type: 'PROCESS_FUNDING';
+  transactionId: string;
+  accountId: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  provider?: string;
+  phoneNumber?: string;
+  reference: string;
 }
 
 export interface AccountBalance {
