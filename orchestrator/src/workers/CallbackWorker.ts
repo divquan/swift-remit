@@ -39,14 +39,31 @@ export class CallbackWorker {
             const callbackData = jobData.data;
             
             const providerResponse: PaymentProviderResponse = {
-              success: callbackData.status === 'COMPLETED',
-              providerTxnId: callbackData.providerTxnId,
-              status: callbackData.status,
-              failureReason: callbackData.failureReason || "unknown",
+              success: callbackData.status === 'success',
+              providerTxnId: callbackData.providerTxnId || callbackData.transactionId,
+              paymentId: callbackData.paymentId,
+              reference: callbackData.reference,
+              status: callbackData.status === 'success' ? 'COMPLETED' : 'FAILED',
+              failureReason: callbackData.failureReason,
               metadata: callbackData.metadata,
             };
 
-            await this.orchestrator.handlePaymentResult(callbackData.remittanceId, providerResponse);
+            // Handle funding vs remittance callbacks
+            if (callbackData.transactionId && callbackData.accountId && callbackData.userId && !callbackData.remittanceId) {
+              // This is a funding callback
+              await this.orchestrator.handleFundingResult(
+                callbackData.transactionId, 
+                callbackData.accountId,
+                callbackData.userId,
+                providerResponse
+              );
+            } else if (callbackData.remittanceId) {
+              // This is a remittance callback
+              await this.orchestrator.handlePaymentResult(callbackData.remittanceId, providerResponse);
+            } else {
+              console.warn('Callback data missing required identifiers:', callbackData);
+              return;
+            }
             
             console.log(`Payment callback processed successfully`);
           } catch (error) {

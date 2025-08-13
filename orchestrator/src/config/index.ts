@@ -25,12 +25,19 @@ export const CONFIG = {
   
   
   // External Services
+  API_GATEWAY_URL: process.env.API_GATEWAY_URL || 'http://localhost:3000',
   PAYMENT_PROVIDER_URL: process.env.MOCK_PAYMENT_PROVIDER_URL || 'http://localhost:3003',
   AUDIT_LOGGER_URL: process.env.AUDIT_LOGGER_URL || 'http://localhost:3004',
   
-  // Paystack Configuration
-  PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY || 'sk_test_45a6b86cd8f76273dbb4f46421f274acee89171f',
-  PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_81aec086991df0463d9f46f6df3bcbf2daa5ab3b',
+  // Central Accounts Configuration (replaces external payment providers)
+  CENTRAL_ACCOUNTS: {
+    ENABLED: true,
+    SIMULATE_DELAYS: true,
+    SUCCESS_RATE: {
+      CHARGE: 0.9, // 90% success rate for charges
+      TRANSFER: 0.85 // 85% success rate for transfers
+    }
+  },
   
   // Logging
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',

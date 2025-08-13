@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { WebhookController } from '../controllers/WebhookController';
 import { createRateLimit } from '../middleware/common';
+import express from 'express';
 
 const router = Router();
 
@@ -18,8 +19,20 @@ const webhookRateLimit = createRateLimit({
   message: 'Too many webhook requests'
 });
 
+// Raw body middleware for webhook signature verification
+const rawBodyMiddleware = (req: any, res: any, next: any) => {
+  req.rawBody = '';
+  req.on('data', (chunk: any) => {
+    req.rawBody += chunk;
+  });
+  req.on('end', () => {
+    next();
+  });
+};
+
 // Payment provider webhooks
 router.post('/payment/:provider',
+  express.raw({ type: 'application/json' }),
   webhookRateLimit,
   WebhookController.handleProviderWebhook
 );

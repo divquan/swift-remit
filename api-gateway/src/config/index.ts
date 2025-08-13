@@ -36,7 +36,7 @@ export const config = {
   },
   
   security: {
-    webhookSecret: process.env.WEBHOOK_SECRET!,
+    webhookSecret: process.env.WEBHOOK_SECRET || 'default_webhook_secret',
     bcryptRounds: 12,
   },
   
@@ -44,7 +44,7 @@ export const config = {
   paystack: {
     secretKey: process.env.PAYSTACK_SECRET_KEY || 'sk_test_your_secret_key_here',
     publicKey: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_your_public_key_here',
-    webhookSecret: process.env.PAYSTACK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET!,
+    webhookSecret: process.env.PAYSTACK_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || 'default_webhook_secret',
   },
   
   rateLimit: {
@@ -61,7 +61,6 @@ export const config = {
 const requiredEnvVars = [
   'DATABASE_URL',
   'JWT_SECRET',
-  'WEBHOOK_SECRET',
 ];
 
 for (const envVar of requiredEnvVars) {

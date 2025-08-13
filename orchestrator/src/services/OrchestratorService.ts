@@ -779,4 +779,74 @@ export class OrchestratorService {
       } as RemittanceProcessingResult;
     }
   }
+
+  /**
+   * Handle funding payment callback from webhook
+   */
+  async handleFundingResult(transactionId: string, accountId: string, userId: string, providerResponse: PaymentProviderResponse): Promise<void> {
+    console.log(`Processing funding callback for transaction ${transactionId}:`, providerResponse);
+    
+    try {
+      await db.$transaction(async (prisma) => {
+        // 1. Get the transaction
+        const transaction = await prisma.transactions.findUnique({
+          where: { id: transactionId }
+        });
+
+        if (!transaction) {
+          throw new Error(`Transaction ${transactionId} not found for funding callback`);
+        }
+
+        // 2. Update transaction status based on payment result
+        const newStatus = providerResponse.success ? TransactionStatus.COMPLETED : TransactionStatus.FAILED;
+        
+        await prisma.transactions.update({
+          where: { id: transactionId },
+          data: {
+            status: newStatus,
+            metadata: {
+              ...(transaction.metadata as object || {}),
+              paymentResponse: JSON.parse(JSON.stringify(providerResponse)),
+              webhookProcessedAt: new Date().toISOString()
+            },
+            updatedAt: new Date()
+          }
+        });
+
+        // 3. If payment was successful, update account balance
+        if (providerResponse.success) {
+          await prisma.accounts.update({
+            where: { id: accountId },
+            data: {
+              balance: {
+                increment: Number(transaction.amount)
+              },
+              updatedAt: new Date()
+            }
+          });
+
+          console.log(`Account ${accountId} balance updated by ${transaction.amount}`);
+        }
+
+        // 4. Log audit trail
+        await this.auditLogger.log({
+          userId,
+          action: providerResponse.success ? 'FUNDING_COMPLETED' : 'FUNDING_FAILED',
+          resource: 'TRANSACTION',
+          details: {
+            transactionId,
+            accountId,
+            amount: Number(transaction.amount),
+            currency: transaction.currency,
+            providerResponse: JSON.parse(JSON.stringify(providerResponse))
+          }
+        });
+      });
+
+      console.log(`Funding callback processed successfully for transaction ${transactionId}`);
+    } catch (error) {
+      console.error('Error processing funding callback:', error);
+      throw error;
+    }
+  }
 }
