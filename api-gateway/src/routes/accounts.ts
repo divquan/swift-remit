@@ -15,6 +15,9 @@ const router = Router();
 // All account routes require authentication
 router.use(authenticate);
 
+// Get all accounts for the authenticated user
+router.get('/', AccountController.getUserAccounts);
+
 // Create new account
 router.post('/',
   createAccountValidation,

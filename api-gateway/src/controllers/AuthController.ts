@@ -53,7 +53,7 @@ export class AuthController {
       const { email, password, firstName, lastName, phoneNumber, countryCode }: CreateUserRequest = req.body;
       
       // Check if user already exists
-      const existingUser = await prisma.user.findUnique({
+      const existingUser = await prisma.users.findUnique({
         where: { email }
       });
       
@@ -71,7 +71,7 @@ export class AuthController {
       const hashedPassword = await bcrypt.hash(password, config.security.bcryptRounds);
       
       // Create user
-      const user = await prisma.user.create({
+      const user = await prisma.users.create({
         data: {
           id: uuidv4(),
           email,
@@ -149,7 +149,7 @@ export class AuthController {
       const { email, password }: LoginRequest = req.body;
       
       // Find user
-      const user = await prisma.user.findUnique({
+      const user = await prisma.users.findUnique({
         where: { email },
         select: {
           id: true,
@@ -186,7 +186,7 @@ export class AuthController {
       }
       
       // Update last login
-      await prisma.user.update({
+      await prisma.users.update({
         where: { id: user.id },
         data: { lastLoginAt: new Date() }
       });

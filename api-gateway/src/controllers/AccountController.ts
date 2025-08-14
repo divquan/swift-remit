@@ -10,6 +10,112 @@ export class AccountController {
   /**
    * @swagger
    * /accounts:
+   *   get:
+   *     summary: Get all accounts for the authenticated user
+   *     tags: [Accounts]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: User accounts retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       id:
+   *                         type: string
+   *                       accountType:
+   *                         type: string
+   *                       currency:
+   *                         type: string
+   *                       balance:
+   *                         type: number
+   *                       status:
+   *                         type: string
+   *                       createdAt:
+   *                         type: string
+   *                 metadata:
+   *                   type: object
+   *                   properties:
+   *                     total:
+   *                       type: number
+   *                     activeAccounts:
+   *                       type: number
+   *       401:
+   *         description: Unauthorized
+   */
+  static async getUserAccounts(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      
+      // Get all accounts for the authenticated user
+      const accounts = await prisma.accounts.findMany({
+        where: {
+          userId
+        },
+        include: {
+          users: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+      
+      // Calculate metadata
+      const metadata = {
+        total: accounts.length,
+        activeAccounts: accounts.filter((acc: any) => acc.status === 'ACTIVE').length,
+        totalBalance: accounts.reduce((sum: number, acc: any) => sum + Number(acc.balance), 0),
+        currencies: [...new Set(accounts.map((acc: any) => acc.currency))],
+        accountTypes: [...new Set(accounts.map((acc: any) => acc.accountType))]
+      };
+      
+      const response: ApiResponse = {
+        success: true,
+        message: 'User accounts retrieved successfully',
+        data: {
+          accounts,
+          metadata
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string
+      };
+      
+      return res.status(200).json(response);
+    } catch (error) {
+      console.error('Get user accounts error:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        message: 'Failed to retrieve user accounts',
+        error: config.server.env === 'development' ? (error as Error).message : undefined,
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] as string
+      };
+      
+      return res.status(500).json(response);
+    }
+  }
+
+  /**
+   * @swagger
+   * /accounts:
    *   post:
    *     summary: Create a new account
    *     tags: [Accounts]
@@ -45,17 +151,18 @@ export class AccountController {
       const userId = req.user!.userId;
       
       // Create account in Postgres with initial balance of 0
-      const account = await prisma.account.create({
+      const account = await prisma.accounts.create({
         data: {
           id: uuidv4(),
           userId,
           accountType,
           currency,
           balance: 0,
-          status: 'ACTIVE'
+          status: 'ACTIVE',
+          updatedAt: new Date()
         },
         include: {
-          user: {
+          users: {
             select: {
               firstName: true,
               lastName: true,
@@ -118,13 +225,13 @@ export class AccountController {
       const { id } = req.params;
       const userId = req.user!.userId;
       
-      const account = await prisma.account.findFirst({
+      const account = await prisma.accounts.findFirst({
         where: {
           // id,
           userId // Ensure user can only access their own accounts
         },
         include: {
-          user: {
+          users: {
             select: {
               firstName: true,
               lastName: true,
@@ -194,7 +301,7 @@ export class AccountController {
       const userId = req.user!.userId;
       
       // Verify account ownership
-      const account = await prisma.account.findFirst({
+      const account = await prisma.accounts.findFirst({
         where: {
           id,
           userId
@@ -282,7 +389,7 @@ export class AccountController {
       const skip = (page - 1) * limit;
       
       // Verify account ownership
-      const account = await prisma.account.findFirst({
+      const account = await prisma.accounts.findFirst({
         where: {
           id,
           userId
@@ -301,7 +408,7 @@ export class AccountController {
       
       // Get transactions
       const [transactions, total] = await Promise.all([
-        prisma.remittance.findMany({
+        prisma.remittances.findMany({
           where: {
             OR: [
               { senderAccountId: id },
@@ -326,7 +433,7 @@ export class AccountController {
             receiverDetails: true
           }
         }),
-        prisma.remittance.count({
+        prisma.remittances.count({
           where: {
             OR: [
               { senderAccountId: id },
@@ -435,7 +542,7 @@ export class AccountController {
       }
 
       // Verify account belongs to user
-      const account = await prisma.account.findFirst({
+      const account = await prisma.accounts.findFirst({
         where: {
           id: accountId,
           userId // Ensure user can only fund their own accounts
@@ -453,7 +560,7 @@ export class AccountController {
       }
 
       // Create funding transaction record
-      const transaction = await prisma.transaction.create({
+      const transaction = await prisma.transactions.create({
         data: {
           id: uuidv4(),
           creditAccountId: accountId, // For funding, this is a credit to the account
@@ -463,6 +570,7 @@ export class AccountController {
           description: `Account funding via ${paymentMethod}`,
           status: 'PENDING',
           reference: `fund_${uuidv4()}`,
+          updatedAt: new Date(),
           metadata: {
             paymentMethod,
             provider,
