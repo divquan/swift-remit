@@ -110,10 +110,10 @@ export class AdminController {
     try {
       // Get remittance statistics
       const [totalRemittances, pendingRemittances, completedRemittances, failedRemittances] = await Promise.all([
-        prisma.remittance.count(),
-        prisma.remittance.count({ where: { status: 'PENDING' } }),
-        prisma.remittance.count({ where: { status: 'COMPLETED' } }),
-        prisma.remittance.count({ where: { status: 'FAILED' } })
+        prisma.remittances.count(),
+        prisma.remittances.count({ where: { status: 'PENDING' } }),
+        prisma.remittances.count({ where: { status: 'COMPLETED' } }),
+        prisma.remittances.count({ where: { status: 'FAILED' } })
       ]);
       
       // Kafka topics statistics (simplified for now)
@@ -186,7 +186,7 @@ export class AdminController {
       const reconciliationId = `reconcile-${Date.now()}`;
       
       // Get all accounts from Postgres
-      const accounts = await prisma.account.findMany({
+      const accounts = await prisma.accounts.findMany({
         where: { status: 'ACTIVE' },
         select: {
           id: true,
@@ -300,10 +300,10 @@ export class AdminController {
       }
 
       // Find the account
-      const account = await prisma.account.findUnique({
+      const account = await prisma.accounts.findUnique({
         where: { id: accountId },
         include: {
-          user: {
+          users: {
             select: {
               firstName: true,
               lastName: true,
@@ -326,7 +326,7 @@ export class AdminController {
       // Perform funding transaction
       const fundingResult = await prisma.$transaction(async (prisma) => {
         // Create funding transaction record
-        const transaction = await prisma.transaction.create({
+        const transaction = await prisma.transactions.create({
           data: {
             id: uuidv4(),
             creditAccountId: accountId,
@@ -346,7 +346,7 @@ export class AdminController {
         });
 
         // Update account balance
-        const updatedAccount = await prisma.account.update({
+        const updatedAccount = await prisma.accounts.update({
           where: { id: accountId },
           data: {
             balance: {
@@ -360,7 +360,7 @@ export class AdminController {
       });
 
       // Log audit event
-      await prisma.auditLog.create({
+      await prisma.audit_logs.create({
         data: {
           id: uuidv4(),
           action: 'ACCOUNT_FUNDED',
@@ -371,7 +371,7 @@ export class AdminController {
             currency: currency || account.currency,
             description,
             transactionId: fundingResult.transaction.id,
-            accountHolder: `${account.user.firstName} ${account.user.lastName}`,
+            accountHolder: `${account.users.firstName} ${account.users.lastName}`,
             newBalance: fundingResult.updatedAccount.balance
           },
           ipAddress: req.ip,
@@ -389,7 +389,7 @@ export class AdminController {
           amount,
           currency: currency || account.currency,
           newBalance: Number(fundingResult.updatedAccount.balance),
-          accountHolder: `${account.user.firstName} ${account.user.lastName}`,
+          accountHolder: `${account.users.firstName} ${account.users.lastName}`,
           fundedAt: new Date().toISOString()
         },
         timestamp: new Date().toISOString(),
@@ -453,10 +453,10 @@ export class AdminController {
       }
 
       const [accounts, total] = await Promise.all([
-        prisma.account.findMany({
+        prisma.accounts.findMany({
           where: whereClause,
           include: {
-            user: {
+            users: {
               select: {
                 id: true,
                 firstName: true,
@@ -469,7 +469,7 @@ export class AdminController {
           skip,
           take: limit
         }),
-        prisma.account.count({ where: whereClause })
+        prisma.accounts.count({ where: whereClause })
       ]);
 
       const response: ApiResponse = {
@@ -483,7 +483,7 @@ export class AdminController {
             accountType: account.accountType,
             status: account.status,
             createdAt: account.createdAt,
-            user: account.user
+            user: account.users
           })),
           pagination: {
             page,

@@ -649,7 +649,7 @@ export class RemittanceController {
       const enrichedRemittance = {
         ...remittance,
         exchangeRate: remittance.convertedAmount ? Number(remittance.convertedAmount) / Number(remittance.amount) : null,
-        fee: this.calculateFee(Number(remittance.amount), remittance.currency, remittance.convertedCurrency || undefined),
+        fee: RemittanceController.calculateFee(Number(remittance.amount), remittance.currency, remittance.convertedCurrency || undefined),
         timeInTransit: remittance.completedAt ? 
           Math.round((new Date(remittance.completedAt).getTime() - new Date(remittance.createdAt).getTime()) / (1000 * 60 * 60)) : null, // hours
         canCancel: ['PENDING', 'PROCESSING'].includes(remittance.status),
@@ -801,7 +801,7 @@ export class RemittanceController {
         data: {
           remittanceId: id,
           currentStatus: remittance.status,
-          statusDescription: this.getStatusDescription(remittance.status),
+          statusDescription: RemittanceController.getStatusDescription(remittance.status),
           timeline,
           recipient: {
             name: receiverName,
@@ -899,8 +899,8 @@ export class RemittanceController {
       const totalFee = baseFee + percentageFee;
       
       // Provider-specific adjustments
-      const providerMultiplier = paymentProvider === 'MTN_MOBILE_MONEY' ? 0.9 : 
-                                paymentProvider?.includes('BANK') ? 1.1 : 1.0;
+      const providerMultiplier = paymentProvider === 'MTN' ? 0.9 : 
+                                ['GCB', 'ECOBANK', 'STANBIC', 'FIDELITY', 'ZENITH', 'UBA', 'ACCESS'].includes(paymentProvider || '') ? 1.1 : 1.0;
       const adjustedFee = totalFee * providerMultiplier;
 
       // Calculate converted amounts
@@ -935,8 +935,8 @@ export class RemittanceController {
             estimatedDelivery: deliveryEstimate,
             validUntil: new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
           },
-          supportedProviders: this.getProvidersForDeliveryMethod(deliveryMethod, destination),
-          warnings: this.getEstimateWarnings(amount, fromCurrency, toCurrency),
+          supportedProviders: RemittanceController.getProvidersForDeliveryMethod(deliveryMethod, destination),
+          warnings: RemittanceController.getEstimateWarnings(amount, fromCurrency, toCurrency),
           compliance: {
             requiresId: amount > 1000,
             requiresPurpose: amount > 500,
@@ -981,14 +981,18 @@ export class RemittanceController {
     
     const providers = {
       mobile_money: [
-        { code: 'MTN_MOBILE_MONEY', name: 'MTN Mobile Money', fee: 2.99 },
-        { code: 'VODAFONE_CASH', name: 'Vodafone Cash', fee: 3.49 },
-        { code: 'AIRTELTIGO_MONEY', name: 'AirtelTigo Money', fee: 3.49 }
+        { code: 'MTN', name: 'MTN Mobile Money', fee: 2.99 },
+        { code: 'TELECEL', name: 'Telecel Cash', fee: 3.49 },
+        { code: 'AIRTELTIGO', name: 'AirtelTigo Money', fee: 3.49 }
       ],
       bank_account: [
-        { code: 'GCB_BANK', name: 'GCB Bank Limited', fee: 4.99 },
-        { code: 'ECOBANK_GHANA', name: 'Ecobank Ghana', fee: 5.99 },
-        { code: 'STANBIC_BANK', name: 'Stanbic Bank Ghana', fee: 5.99 }
+        { code: 'GCB', name: 'Ghana Commercial Bank', fee: 4.99 },
+        { code: 'ECOBANK', name: 'Ecobank Ghana', fee: 5.99 },
+        { code: 'STANBIC', name: 'Stanbic Bank Ghana', fee: 5.99 },
+        { code: 'FIDELITY', name: 'Fidelity Bank Ghana', fee: 5.99 },
+        { code: 'ZENITH', name: 'Zenith Bank Ghana', fee: 5.99 },
+        { code: 'UBA', name: 'United Bank for Africa Ghana', fee: 5.99 },
+        { code: 'ACCESS', name: 'Access Bank Ghana', fee: 5.99 }
       ],
       cash_pickup: [
         { code: 'WESTERN_UNION', name: 'Western Union', fee: 6.99 },

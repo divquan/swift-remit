@@ -305,7 +305,9 @@ export class PaymentProviderService {
     if (!bankCode) return null;
 
     const code = bankCode.toUpperCase();
-    
+
+    console.log("THis is the bank code gotten: ", code);
+
     // Mobile Money providers
     if (code.includes('MTN') || code === 'MTN') return 'MTN_MOMO';
     if (code.includes('TELECEL') || code === 'TELECEL') return 'TELECEL_MOMO';
